@@ -59,10 +59,11 @@ import Testing
     #expect(PathPattern.matches(pattern, path) == expected)
   }
 
-  @Test func anchoredPatternsMatchFromTheRoot() {
-    #expect(PathPattern.matches("Sources", "Sources/A.swift", anchored: true))
-    #expect(!PathPattern.matches("Sources", "Packages/Kit/Sources/A.swift", anchored: true))
-    #expect(PathPattern.matches("Sources/A.swift", "Sources/A.swift", anchored: true))
+  @Test func aLeadingSlashAnchorsANameAtTheRoot() {
+    #expect(PathPattern.matches("/Sources", "Sources/A.swift"))
+    #expect(!PathPattern.matches("/Sources", "Packages/Kit/Sources/A.swift"))
+    #expect(PathPattern.matches("Sources", "Packages/Kit/Sources/A.swift"))
+    #expect(PathPattern.matches("/Sources/A.swift", "Sources/A.swift"))
   }
 }
 
@@ -112,14 +113,31 @@ import Testing
   @Test func narrowsWithInAndExcluding() throws {
     let production = try Fixture.codebase().productionCode
     #expect(
-      production.in("Sources").excluding("Legacy.swift").relativePaths == [
+      production.in("/Sources").excluding("Legacy.swift").relativePaths == [
         "Sources/App/Feature.swift", "Sources/Model/Item.swift",
       ])
     #expect(production.in("Sources/App", "Packages").relativePaths.count == 3)
-    #expect(production.in("Sources").in("Sources/Model").relativePaths == ["Sources/Model/Item.swift"])
+    #expect(production.in("/Sources").in("Sources/Model").relativePaths == ["Sources/Model/Item.swift"])
     #expect(production.excluding("Sources/App").relativePaths.count == 2)
-    #expect(production.in("Kit").relativePaths.isEmpty, "in(_:) matches from the root")
     #expect(production.in("Nowhere").files.isEmpty)
+  }
+
+  @Test func inReadsPatternsLikeExcluding() throws {
+    let production = try Fixture.codebase().productionCode
+    // A name matches anywhere, as in excluding(_:) and excludes.
+    #expect(production.in("Kit").relativePaths == ["Packages/Kit/Sources/Kit/Kit.swift"])
+    #expect(production.in("Sources").relativePaths.count == 4)
+    #expect(production.in("Legacy.swift").relativePaths == ["Sources/App/Legacy.swift"])
+    // A path with a slash, or a leading slash, matches from the root.
+    #expect(production.in("/Sources").relativePaths.count == 3)
+    #expect(production.in("Kit/Sources").relativePaths.isEmpty)
+    #expect(production.in("*/Kit").relativePaths.count == 1)
+    for pattern in ["Kit", "Sources", "/Sources", "Sources/App", "*.swift", "App"] {
+      #expect(
+        Set(production.in(pattern).relativePaths).isDisjoint(with: production.excluding(pattern).relativePaths),
+        "in and excluding split the scope the same way for \(pattern)")
+      #expect(production.in(pattern).relativePaths.count + production.excluding(pattern).relativePaths.count == 4)
+    }
   }
 
   @Test func containingSkipsFilesBeforeParsing() throws {

@@ -80,7 +80,7 @@ extension Rule {
 
 @Suite struct LoggingRules {
   @Test func noPrint() throws {
-    let calls = try Codebase().productionCode.in("Sources").calls(named: "print").filter { $0.node.receiver == nil }
+    let calls = try Codebase().productionCode.in("/Sources").calls(named: "print").filter { $0.node.receiver == nil }
     expectNone(calls, rule: .noPrint)
   }
 }
@@ -93,11 +93,20 @@ let codebase = try Codebase()            // or Codebase(root: url)
 codebase.productionCode                  // everything that is not test code
 codebase.testCode                        // under a folder ending in Tests or named Fixtures
 codebase.allCode
-  .in("Packages/Features")               // from the root; several paths are a union, chained calls narrow
-  .excluding("DocumentFeature", "*.generated.swift")  // a name anywhere, a path from the root, or a * pattern
+  .in("Packages/Features")               // several patterns are a union, chained calls narrow
+  .excluding("DocumentFeature", "*.generated.swift")
   .containing("@Reducer")                // only files whose raw text contains this, before parsing
 Scope(files: [SourceFile(path: "A.swift", source: "…")])  // in-memory, to test a rule
 ```
+
+`in(_:)`, `excluding(_:)` and `excludes` read a pattern the same way, like a `.gitignore` line:
+
+| Pattern | Matches |
+|---|---|
+| `Models`, `Legacy.swift` | a folder or file with that name, at any depth |
+| `Packages/Features` | that path from the root, and everything under it |
+| `/Sources` | the top-level `Sources` folder only |
+| `*Tests`, `*.generated.swift`, `Sources/*/Models` | `*` is any run of characters inside one path component |
 
 ## Queries
 
