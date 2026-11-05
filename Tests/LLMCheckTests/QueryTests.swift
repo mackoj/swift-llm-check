@@ -1,0 +1,115 @@
+import LLMCheck
+import SwiftSyntax
+import Testing
+
+@Suite struct QueryTests {
+  @Test func findsCallsWhereverTheyAre() {
+    let scope = Scope(files: [
+      file(
+        """
+        func a() async throws {
+          await withKnownIssue { try record() }
+          let x = try await track(1)
+          defer { track(2) }
+        }
+        func b() -> Effect {
+          return .run { send in await track(3) }
+        }
+        func c(_ value: Int) {
+          switch value {
+          case 1: track(4)
+          default: if true { _ = [track(5)].map { _ in track(6) } }
+          }
+        }
+        // track(7) in a comment
+        let s = "track(8) in a string"
+        """)
+    ])
+    #expect(scope.calls(named: "track").map(\.location.line) == [3, 4, 7, 11, 12, 12])
+    #expect(scope.calls(named: "withKnownIssue").map(\.location.line) == [2])
+    #expect(scope.calls(named: "withKnownIssue", "record").count == 2)
+  }
+
+  @Test func readsTheCalledNameAndReceiver() throws {
+    let calls = Scope(files: [file("print(1); edit.apply(to: &doc); .init(); Foo<Int>(); Swift.print(2)")])
+      .nodes(of: FunctionCallExprSyntax.self)
+    #expect(calls.map(\.node.calledName) == ["print", "apply", "init", "Foo", "print"])
+    #expect(calls.map { $0.node.receiver?.trimmedDescription } == [nil, "edit", nil, nil, "Swift"])
+  }
+
+  @Test func referencesSkipCommentsAndStrings() {
+    let scope = Scope(files: [
+      file(
+        """
+        // URLSession in a comment
+        let note = "URLSession in a string"
+        let session = URLSession.shared
+        var manager: FileManager { .default }
+        let qualified: Foundation.URLSession? = nil
+        /// Uses `URLSession`.
+        func load() {}
+        """)
+    ])
+    let found = scope.references(to: "URLSession", "FileManager")
+    #expect(found.map(\.location.line) == [3, 4, 5])
+    #expect(
+      found.map(\.snippet) == [
+        "let session = URLSession.shared", "var manager: FileManager { .default }",
+        "let qualified: Foundation.URLSession? = nil",
+      ])
+  }
+
+  @Test func genericNodeSearchWithAPredicate() {
+    let scope = Scope(files: [file("let a = b!\nlet c = d!.e!\nlet f = g")])
+    #expect(scope.nodes(of: ForceUnwrapExprSyntax.self).count == 3)
+    #expect(scope.nodes(of: ForceUnwrapExprSyntax.self) { $0.location.line == 1 }.count == 1)
+  }
+
+  @Test func matchesKnowTheirEnclosingDeclarations() throws {
+    let scope = Scope(files: [
+      file(
+        """
+        struct Feature {
+          enum Action {}
+          func reduce() {
+            track()
+          }
+          var body: Int { track() }
+        }
+        extension Feature.State {
+          init() { track() }
+        }
+        """, path: "Sources/Feature.swift")
+    ])
+    let calls = scope.calls(named: "track")
+    #expect(calls[0].declarationNames == ["Feature.reduce", "Feature"])
+    #expect(calls[1].declarationNames == ["Feature.body", "Feature"])
+    #expect(calls[2].declarationNames == ["Feature.State.init", "Feature.State"])
+    #expect(calls[0].location.description == "Sources/Feature.swift:4:5")
+    #expect(calls[0].snippet == "track()")
+  }
+
+  @Test func readsAttachedComments() throws {
+    let scope = Scope(files: [
+      file(
+        """
+        func test() {
+          // Why it is off.
+          store.exhaustivity = .off
+          store.exhaustivity = .off  // Trailing reason.
+          store.exhaustivity = .off
+          /* block */ store.exhaustivity = .off
+          store.exhaustivity = .off
+          // About the next line, not the one above.
+        }
+        """)
+    ])
+    let statements = scope.nodes(of: CodeBlockItemSyntax.self) { $0.node.item.is(ExprSyntax.self) }
+    #expect(
+      statements.map(\.node.attachedComments) == [
+        ["// Why it is off."], ["// Trailing reason."], [], ["/* block */"], [],
+      ])
+    #expect(statements[0].node.leadingComments == ["// Why it is off."])
+    #expect(statements[1].node.trailingComments == ["// Trailing reason."])
+  }
+}
