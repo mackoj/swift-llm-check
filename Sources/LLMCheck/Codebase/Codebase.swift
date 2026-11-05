@@ -36,18 +36,19 @@ public struct Codebase: Sendable {
   ///   - filePath: where to start; the calling file by default.
   ///   - marker: the file that marks the root.
   public init(filePath: String = #filePath, marker: String = Configuration.markerFileName) throws {
-    var folder = URL(fileURLWithPath: filePath).deletingLastPathComponent().standardizedFileURL
-    while true {
+    // Walk the folder's components up to "/", without relying on how `deletingLastPathComponent()` treats the root.
+    var components = URL(fileURLWithPath: filePath).deletingLastPathComponent().standardizedFileURL.pathComponents
+    while !components.isEmpty {
+      let folder = URL(fileURLWithPath: NSString.path(withComponents: components), isDirectory: true)
       let candidate = folder.appendingPathComponent(marker)
       if FileManager.default.fileExists(atPath: candidate.path) {
         let yaml = try String(contentsOf: candidate, encoding: .utf8)
         try self.init(root: folder, configuration: Configuration(yaml: yaml))
         return
       }
-      let parent = folder.deletingLastPathComponent()
-      if parent.path == folder.path { throw MarkerNotFound(start: filePath, marker: marker) }
-      folder = parent
+      components.removeLast()
     }
+    throw MarkerNotFound(start: filePath, marker: marker)
   }
 
   /// Every file that is not test code.
