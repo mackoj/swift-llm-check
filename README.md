@@ -167,7 +167,22 @@ imports Testing write `Testing.SourceLocation`. Now only a file that imports bot
 
 `expectNone(findings, rule:baseline:)` records one issue per finding. `expectAll(items, rule:baseline:) { … }` records
 one per item that fails the predicate. Both return a `CheckResult`. `rule.check(findings, baseline:)` computes the same
-result without recording anything, for XCTest or for your own reporting.
+result without recording anything, for your own reporting.
+
+**XCTest.** Inside an `XCTestCase`, the same calls are methods that record XCTest failures at the violation's file
+and line, and stale baseline entries at the call site:
+
+```swift
+import LLMCheck
+import XCTest
+
+final class LoggingRules: XCTestCase {
+  func testNoPrint() throws {
+    let calls = try Codebase().productionCode.calls(named: "print").filter { $0.node.receiver == nil }
+    expectNone(calls, rule: .noPrint)
+  }
+}
+```
 
 A baseline lets a rule land before every violation is fixed. An entry is a file name (`Sidebar.swift`), a path or the
 end of one (`Feature/Sidebar.swift`), or a file and a declaration (`Sidebar.swift:SidebarFeature.State`, which covers
@@ -228,9 +243,10 @@ violation is the part that helps agents most. swift-llm-check keeps that and cha
 | Speed (Telaio, 8 rules) | 35 s | 0.7 s |
 | swift-syntax | `601..<605` | `601..<700` |
 | Baselines | File names, fail when stale | File names, paths or `File.swift:Decl`, fail when stale |
+| XCTest | Assertions | Assertions, at the violation's file and line |
 | Dependencies | swift-syntax, Yams | swift-syntax |
 
-Harmonize has a larger declaration model (properties, accessors, function bodies as objects) and XCTest assertions.
+Harmonize has a larger declaration model (properties, accessors, function bodies as objects).
 swift-llm-check stays small and gives you the SwiftSyntax node when you need more.
 
 ## Development
