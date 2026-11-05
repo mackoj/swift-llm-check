@@ -133,8 +133,26 @@ scope.references(to: "URLSession", "FileManager")  // code only: comments and st
 statement.node.attachedComments              // the comments above a node and the one at the end of its line
 ```
 
-`import LLMCheck` re-exports SwiftSyntax, so node types need no other import. When a file also imports Testing,
-write `Testing.SourceLocation` if you need that type, because SwiftSyntax has one too.
+**SwiftSyntax is not re-exported.** `import LLMCheck` is enough for scopes, declarations, `calls(named:)`,
+`references(to:)`, `calledName`, `receiver` and the members of the nodes they return (`call.node.arguments`). A file
+that names a node type, such as `nodes(of: ForceUnwrapExprSyntax.self)` or `.is(InOutExprSyntax.self)`, adds
+`import SwiftSyntax`, and the test target lists the product:
+
+```swift
+dependencies: [
+  .package(url: "https://github.com/mackoj/swift-llm-check.git", from: "0.2.0"),
+  .package(url: "https://github.com/swiftlang/swift-syntax.git", "601.0.0"..<"700.0.0"),
+],
+targets: [
+  .testTarget(name: "ArchitectureTests", dependencies: [
+    .product(name: "LLMCheck", package: "swift-llm-check"),
+    .product(name: "SwiftSyntax", package: "swift-syntax"),
+  ])
+]
+```
+
+Why not re-export: SwiftSyntax and Testing both declare `SourceLocation`, so a re-export made every rule file that
+imports Testing write `Testing.SourceLocation`. Now only a file that imports both modules itself sees the clash.
 
 ## Assertions and baselines
 
