@@ -1,0 +1,4 @@
+# Sample codebase for LLMCheck's own tests.
+excludes:
+  - build
+  - Generated.swift
