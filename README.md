@@ -1,1 +1,214 @@
 # swift-llm-check
+
+Architecture and lint rules for Swift codebases, written as Swift Testing tests. A failing rule records one issue per
+violation at the offending file, line and column, with the offending line and the rule's full text. That text is the
+title, the rationale, how to fix it and a bad and a good example, so the reader can fix the violation without asking.
+That reader is often an AI agent.
+
+```
+Packages/TelaioCLI/Tests/TelaioCLITests/RunCommandTests.swift:100:11: await withKnownIssue {
+
+RULE: withKnownIssue says what the known issue is. [known-issues-explain-themselves, testing]
+WHY: A known issue hides a failing expectation. Without a reason in the call, the next reader cannot tell a bug
+     waiting for a fix from a test nobody understood.
+HOW TO FIX: Pass the reason as the first argument: name the bug and where it is tracked.
+BAD:
+    await withKnownIssue { try await sync.upload() }
+GOOD:
+    await withKnownIssue("sqlite-data 1.12 drops quotaExceeded (bug 1)") { try await sync.upload() }
+```
+
+Requirements: Swift 6 (Xcode 16 or later), macOS 14 or iOS 17. The only dependency is
+[swift-syntax](https://github.com/swiftlang/swift-syntax).
+
+## Installation
+
+Rules usually live in a small test-only package of their own, so the app's build never sees them:
+
+```swift
+// Packages/Architecture/Package.swift
+// swift-tools-version: 6.0
+import PackageDescription
+
+let package = Package(
+  name: "Architecture",
+  platforms: [.macOS(.v14)],
+  dependencies: [.package(url: "https://github.com/mackoj/swift-llm-check.git", branch: "main")],
+  targets: [
+    .testTarget(name: "ArchitectureTests", dependencies: [.product(name: "LLMCheck", package: "swift-llm-check")])
+  ]
+)
+```
+
+Put a `.llm-check.yaml` at the root of the code to check. `Codebase()` walks up from the calling test file to find it:
+
+```yaml
+# Paths never read. A name matches any folder or file; a path with a slash matches from the root; * is a wildcard.
+excludes:
+  - build
+  - DerivedData
+  - Packages/Architecture
+# Optional. A folder whose name ends with one of these holds test code (default: Tests).
+testSuffixes: [Tests]
+# Optional. A folder with one of these names holds test code (default: Fixtures).
+testFolders: [Fixtures]
+```
+
+Hidden folders (`.build`, `.git`, `.swiftpm`…) are always skipped.
+
+## A rule
+
+```swift
+import LLMCheck
+import Testing
+
+extension RuleCategory {
+  static let logging = RuleCategory("logging", description: "Logging and secrets. Read before you log anything.")
+}
+
+extension Rule {
+  static let noPrint = Rule(
+    id: "no-print",
+    title: "The app never calls print.",
+    category: .logging,
+    rationale: "print output is lost in a shipped app and cannot be private.",
+    howToFix: "Use a `Logger(subsystem:category:)` and interpolate with `privacy: .private`.",
+    badExample: #"print("loaded \(url)")"#,
+    goodExample: #"logger.debug("loaded \(url, privacy: .private)")"#
+  )
+}
+
+@Suite struct LoggingRules {
+  @Test func noPrint() throws {
+    let calls = try Codebase().productionCode.in("Sources").calls(named: "print").filter { $0.node.receiver == nil }
+    expectNone(calls, rule: .noPrint)
+  }
+}
+```
+
+## Scopes
+
+```swift
+let codebase = try Codebase()            // or Codebase(root: url)
+codebase.productionCode                  // everything that is not test code
+codebase.testCode                        // under a folder ending in Tests or named Fixtures
+codebase.allCode
+  .in("Packages/Features")               // from the root; several paths are a union, chained calls narrow
+  .excluding("DocumentFeature", "*.generated.swift")  // a name anywhere, a path from the root, or a * pattern
+  .containing("@Reducer")                // only files whose raw text contains this, before parsing
+Scope(files: [SourceFile(path: "A.swift", source: "…")])  // in-memory, to test a rule
+```
+
+## Queries
+
+**Declarations.** `structs`, `classes`, `enums`, `actors`, `protocols`, `extensions`, `functions` and `variables`
+include nested ones. `topLevelDeclarations` and `declarations(.enumCase)` are also available. Each `Declaration` has
+`kind`, `name`, `qualifiedName`, `attributes`, `modifiers`, `inheritance`, `children`, `parent`, `file`, `location`
+(at the `struct`/`func`… keyword, not the attributes) and `syntax`.
+
+```swift
+let reducers = codebase.productionCode.containing("@Reducer").structs.withAttribute("Reducer")
+let states = reducers.flatMap(\.structs).named("State")
+expectAll(states, rule: .stateIsObservable) { $0.hasAttribute("ObservableState") }
+
+let actions = reducers.flatMap(\.enums).named("Action").filter { $0.cases.contains { $0.name == "view" } }
+expectAll(actions, rule: .actionsAreSplit) { $0.inherits(from: "ViewAction") }
+```
+
+**Any node, anywhere.** `nodes(of:)` searches the whole tree, including closures, `await`, `try`, `return`, `switch`
+and `#if`. It returns `Match`es with the `node`, its `file`, `location` and `snippet`.
+
+```swift
+scope.nodes(of: ForceUnwrapExprSyntax.self)
+scope.nodes(of: CodeBlockItemSyntax.self) { $0.node.item.is(ExprSyntax.self) }
+```
+
+**Helpers for the common cases.**
+
+```swift
+scope.calls(named: "withKnownIssue")         // `await withKnownIssue { }`, `return .run { await f() }`…
+call.node.calledName                         // "apply" in `edit.apply(to: &doc)`
+call.node.receiver                           // `edit`; nil for `print(x)`
+scope.references(to: "URLSession", "FileManager")  // code only: comments and strings never match
+statement.node.attachedComments              // the comments above a node and the one at the end of its line
+```
+
+`import LLMCheck` re-exports SwiftSyntax, so node types need no other import. When a file also imports Testing,
+write `Testing.SourceLocation` if you need that type, because SwiftSyntax has one too.
+
+## Assertions and baselines
+
+`expectNone(findings, rule:baseline:)` records one issue per finding. `expectAll(items, rule:baseline:) { … }` records
+one per item that fails the predicate. Both return a `CheckResult`. `rule.check(findings, baseline:)` computes the same
+result without recording anything, for XCTest or for your own reporting.
+
+A baseline lets a rule land before every violation is fixed. An entry is a file name (`Sidebar.swift`), a path or the
+end of one (`Feature/Sidebar.swift`), or a file and a declaration (`Sidebar.swift:SidebarFeature.State`, which covers
+anything nested in it). **An entry that no longer matches any finding fails as stale**, so baselines only shrink.
+
+## Rules for agents before they fail
+
+`RuleCatalog` renders rules as Markdown, one section per category, for an `AGENTS.md` section or a `SKILL.md`.
+`expectFile` keeps the generated file in step with the rules. It fails when the file is out of date, and
+`LLM_CHECK_RECORD=1 swift test` rewrites it.
+
+```swift
+@Test func rulesMarkdownIsUpToDate() throws {
+  let catalog = RuleCatalog([.noPrint, .stateIsObservable])
+  #expect(catalog.duplicateIDs.isEmpty)
+  try expectFile("docs/RULES.md", in: Codebase(), matches: catalog.markdown(title: "Architecture rules"))
+}
+```
+
+## Speed and concurrency
+
+- A codebase lists its files once per process. Each file is read once and parsed at most once per process, whatever
+  number of scopes, rules and suites read it.
+- The caches are thread-safe and never wait on one another: one lock guards a table, and a per-file lock is held only
+  while that file is parsed. Swift Testing's parallel suites are safe, and a stress test hammers the cache from 64
+  concurrent tasks in two parallel suites.
+- Parsing runs on every core. `calls(named:)` and `references(to:)` skip files whose raw text does not contain the
+  name, and `containing(_:)` does the same for declaration queries. Unread files are never parsed.
+- Each node-type search runs once per file and is cached.
+
+On [Telaio](https://github.com/mackoj/telaio), about 1,000 files and 220,000 lines, eight rules run in 0.7 s (1.6 s wall
+time for `swift test`). The same rules on Harmonize took 35 s.
+
+## swift-syntax versions
+
+The range is `601.0.0..<700.0.0`.
+
+- **Lower bound 601** (Swift 6.1). CI builds and tests against 601.0.1 as well as the newest release. The test suite
+  also passes pinned to 602.0.0, 603.0.2 and 604.0.0.
+- **Upper bound below 700.** swift-syntax releases one major per Swift release (601, 602, 603, 604…). An app's
+  macros, such as TCA's, often require the newest one. A narrow cap like Harmonize's `..<605` would hold the app back
+  as soon as 605 ships. LLMCheck uses only the parser, `SyntaxVisitor`, `SourceLocationConverter` and the
+  long-standing declaration and expression nodes, which have been source-compatible across 601 to 604. Each new major
+  is covered by CI when it ships. If a future major breaks LLMCheck, the fix is a patch release that tightens or
+  adapts, not an app blocked in the meantime.
+
+## Compared with Harmonize
+
+[Harmonize](https://github.com/perrystreetsoftware/Harmonize) inspired this library: its 2.0 `Rule` text at the
+violation is the part that helps agents most. swift-llm-check keeps that and changes the rest:
+
+| | Harmonize 2.0.0-beta.2 | swift-llm-check |
+|---|---|---|
+| Parallel suites | Deadlock when two suites warm the cache (`.serialized` needed) | Safe, stress-tested |
+| Calls | `functionCalls` sees whole-statement calls only | `nodes(of:)`/`calls(named:)` search the whole tree |
+| Location | File-level matches report line 1 | Exact line and column, with the offending line |
+| Swift 6 | Types not `Sendable` (`@preconcurrency import`) | Everything `Sendable` |
+| Speed (Telaio, 8 rules) | 35 s | 0.7 s |
+| swift-syntax | `601..<605` | `601..<700` |
+| Baselines | File names, fail when stale | File names, paths or `File.swift:Decl`, fail when stale |
+| Dependencies | swift-syntax, Yams | swift-syntax |
+
+Harmonize has a larger declaration model (properties, accessors, function bodies as objects) and XCTest assertions.
+swift-llm-check stays small and gives you the SwiftSyntax node when you need more.
+
+## Development
+
+```sh
+xcrun swift test
+xcrun swift-format lint --strict -r Package.swift Sources Tests
+```
