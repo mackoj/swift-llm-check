@@ -110,8 +110,8 @@ public struct Scope: Sendable {
 
   // MARK: Declarations
 
-  /// The top-level declarations of every file.
-  public var topLevelDeclarations: [Declaration] { files.flatMap(\.declarations) }
+  /// The top-level declarations of every file, built on every core.
+  public var topLevelDeclarations: [Declaration] { Array(concurrentMap(files) { $0.declarations }.joined()) }
 
   /// Every declaration, nested ones included, depth first.
   public var declarations: [Declaration] { topLevelDeclarations.flatMap { [$0] + $0.descendants } }
