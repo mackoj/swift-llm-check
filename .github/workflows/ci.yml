@@ -25,7 +25,9 @@ jobs:
       - uses: actions/checkout@v4
       - name: Pin swift-syntax
         if: matrix.pin != ''
-        run: sed -i '' 's/"601.0.0"..<"700.0.0"/exact: "${{ matrix.pin }}"/' Package.swift
+        run: |
+          sed -i '' 's/"601.0.0"..<"700.0.0"/exact: "${{ matrix.pin }}"/' Package.swift
+          grep -n swift-syntax Package.swift
       - name: Toolchain
         run: xcrun swift --version
       - name: Test
