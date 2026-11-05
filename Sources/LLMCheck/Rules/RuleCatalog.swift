@@ -49,7 +49,7 @@ public func expectFile(
   _ relativePath: String,
   in codebase: Codebase,
   matches content: String,
-  sourceLocation: SourceLocation = #_sourceLocation
+  sourceLocation: Testing.SourceLocation = #_sourceLocation
 ) throws {
   let url = codebase.root.appendingPathComponent(relativePath)
   if ProcessInfo.processInfo.environment["LLM_CHECK_RECORD"] == "1" {

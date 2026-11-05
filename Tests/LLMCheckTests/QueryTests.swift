@@ -59,6 +59,13 @@ import Testing
       ])
   }
 
+  @Test func containingFiltersOnTheRawText() {
+    let scope = Scope(files: [file("let a = 1", path: "A.swift"), file("// b\nlet b = 2", path: "B.swift")])
+    #expect(scope.containing("b").relativePaths == ["B.swift"])
+    #expect(scope.containing("a", "b").relativePaths == ["A.swift", "B.swift"])
+    #expect(scope.containing("a").containing("b").relativePaths.isEmpty)
+  }
+
   @Test func genericNodeSearchWithAPredicate() {
     let scope = Scope(files: [file("let a = b!\nlet c = d!.e!\nlet f = g")])
     #expect(scope.nodes(of: ForceUnwrapExprSyntax.self).count == 3)

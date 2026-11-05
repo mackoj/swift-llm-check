@@ -20,6 +20,8 @@ public struct Scope: Sendable {
   /// Each group narrows the scope: a file must match one pattern of every group.
   private var inclusions: [[String]] = []
   private var exclusions: [String] = []
+  /// Each group narrows the scope: a file's text must contain one string of every group.
+  private var texts: [[String]] = []
 
   init(codebase: Codebase, kind: Kind) {
     base = .codebase(codebase, kind)
@@ -49,19 +51,39 @@ public struct Scope: Sendable {
     return scope
   }
 
+  /// Only the files whose text contains one of `texts`, checked on the raw text before parsing, so files that
+  /// cannot match are never parsed. ``calls(named:)`` and ``references(to:)-(String...)`` do this for you.
+  ///
+  /// ```swift
+  /// codebase.productionCode.containing("@Reducer").structs.withAttribute("Reducer")
+  /// ```
+  public func containing(_ texts: String...) -> Scope { containing(texts) }
+
+  public func containing(_ texts: [String]) -> Scope {
+    var scope = self
+    scope.texts.append(texts)
+    return scope
+  }
+
   /// The paths in the scope, relative to the root, sorted.
   public var relativePaths: [String] {
     switch base {
     case .codebase(let codebase, let kind):
-      return codebase.relativePaths.filter { path in
+      let paths = codebase.relativePaths.filter { path in
         switch kind {
         case .production: !codebase.configuration.isTestCode(path) && includes(path)
         case .test: codebase.configuration.isTestCode(path) && includes(path)
         case .all: includes(path)
         }
       }
+      guard !texts.isEmpty else { return paths }
+      let texts = texts
+      let kept = concurrentMap(paths) { path in
+        Self.contains(ParseCache.text(root: codebase.root, relativePath: path) ?? "", texts)
+      }
+      return zip(paths, kept).filter(\.1).map(\.0)
     case .files(let files):
-      return files.map(\.relativePath).filter(includes)
+      return files.filter { includes($0.relativePath) && Self.contains($0.source, texts) }.map(\.relativePath)
     }
   }
 
@@ -71,8 +93,12 @@ public struct Scope: Sendable {
     case .codebase(let codebase, _):
       return concurrentMap(relativePaths) { codebase.file($0) }.compactMap { $0 }
     case .files(let files):
-      return files.filter { includes($0.relativePath) }
+      return files.filter { includes($0.relativePath) && Self.contains($0.source, texts) }
     }
+  }
+
+  private static func contains(_ source: String, _ texts: [[String]]) -> Bool {
+    texts.allSatisfy { group in group.contains { source.contains($0) } }
   }
 
   private func includes(_ path: String) -> Bool {
@@ -124,8 +150,8 @@ public struct Scope: Sendable {
   /// Calls whose called name (``SwiftSyntax/FunctionCallExprSyntax/calledName``) is one of `names`: `print(x)`,
   /// `edit.apply(to:)`, `await withKnownIssue { }`, wherever they are.
   public func calls(named names: String...) -> [Match<FunctionCallExprSyntax>] {
-    let names = Set(names)
-    return nodes(of: FunctionCallExprSyntax.self) { $0.node.calledName.map(names.contains) ?? false }
+    let set = Set(names)
+    return containing(names).nodes(of: FunctionCallExprSyntax.self) { $0.node.calledName.map(set.contains) ?? false }
   }
 
   /// Code that names one of `names`: an expression (`URLSession.shared`, `.init`'s `Foo`) or a type (`let x: Foo`,
@@ -133,7 +159,7 @@ public struct Scope: Sendable {
   public func references(to names: String...) -> [Match<Syntax>] { references(to: Set(names)) }
 
   public func references(to names: Set<String>) -> [Match<Syntax>] {
-    let perFile = concurrentMap(files) { file in
+    let perFile = concurrentMap(containing(Array(names)).files) { file in
       let expressions = file.nodes(of: DeclReferenceExprSyntax.self)
         .filter { names.contains($0.baseName.text) }.map(Syntax.init)
       let types = file.nodes(of: IdentifierTypeSyntax.self)

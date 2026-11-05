@@ -122,6 +122,14 @@ import Testing
     #expect(production.in("Nowhere").files.isEmpty)
   }
 
+  @Test func containingSkipsFilesBeforeParsing() throws {
+    let codebase = try Fixture.codebase()
+    #expect(codebase.allCode.containing("withKnownIssue").relativePaths == ["Tests/AppTests/FeatureTests.swift"])
+    #expect(
+      codebase.productionCode.calls(named: "print").map(\.location.description) == ["Sources/App/Feature.swift:16:5"])
+    #expect(codebase.productionCode.references(to: "URLSession").map(\.location.line) == [3])
+  }
+
   @Test func filesCarryTheirRelativePath() throws {
     let file = try #require(try Fixture.codebase().productionCode.in("Sources/Model").files.first)
     #expect(file.relativePath == "Sources/Model/Item.swift")

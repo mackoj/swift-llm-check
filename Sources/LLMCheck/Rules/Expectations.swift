@@ -15,7 +15,7 @@ public func expectNone(
   _ findings: [some Finding],
   rule: Rule,
   baseline: Baseline = [],
-  sourceLocation: SourceLocation = #_sourceLocation
+  sourceLocation: Testing.SourceLocation = #_sourceLocation
 ) -> CheckResult {
   let result = rule.check(findings, baseline: baseline)
   record(result, sourceLocation: sourceLocation)
@@ -33,14 +33,14 @@ public func expectAll<Item: Finding>(
   _ items: [Item],
   rule: Rule,
   baseline: Baseline = [],
-  sourceLocation: SourceLocation = #_sourceLocation,
+  sourceLocation: Testing.SourceLocation = #_sourceLocation,
   _ predicate: (Item) throws -> Bool
 ) rethrows -> CheckResult {
   try expectNone(items.filter { try !predicate($0) }, rule: rule, baseline: baseline, sourceLocation: sourceLocation)
 }
 
 /// Records the issues of a result made with ``Rule/check(_:baseline:)``.
-public func record(_ result: CheckResult, sourceLocation: SourceLocation = #_sourceLocation) {
+public func record(_ result: CheckResult, sourceLocation: Testing.SourceLocation = #_sourceLocation) {
   for finding in result.violations {
     Issue.record(Comment(rawValue: message(for: finding, rule: result.rule)), sourceLocation: finding.sourceLocation)
   }
@@ -63,10 +63,10 @@ public func message(for finding: any Finding, rule: Rule) -> String {
 
 extension Finding {
   /// The finding's place as a Swift Testing source location, so Xcode shows the issue on the offending line.
-  public var sourceLocation: SourceLocation {
+  public var sourceLocation: Testing.SourceLocation {
     let components = location.relativePath.split(separator: "/")
     let module = components.dropLast().last.map(String.init) ?? "Source"
-    return SourceLocation(
+    return Testing.SourceLocation(
       fileID: "\(module)/\(location.fileName)", filePath: location.filePath, line: max(location.line, 1),
       column: max(location.column, 1))
   }

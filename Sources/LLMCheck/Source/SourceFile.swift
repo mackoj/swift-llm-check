@@ -80,24 +80,37 @@ private final class NodeCollector<Node: SyntaxProtocol>: SyntaxAnyVisitor {
   }
 }
 
-/// One parse per file per process, safe from any number of threads and tasks.
+/// One read and one parse per file per process, safe from any number of threads and tasks.
 enum ParseCache {
+  private static let texts = Locked<[String: Once<String?>]>([:])
   private static let entries = Locked<[String: Once<SourceFile?>]>([:])
   private static let parses = Locked<[String: Int]>([:])
 
-  static func file(root: URL, relativePath: String) -> SourceFile? {
-    let url = root.appendingPathComponent(relativePath)
-    let key = root.path + "|" + relativePath
-    let once = entries.withLock { entries in
-      if let once = entries[key] { return once }
-      let once = Once<SourceFile?>()
-      entries[key] = once
-      return once
+  /// The file's text, read once.
+  static func text(root: URL, relativePath: String) -> String? {
+    once(in: texts, root: root, relativePath: relativePath).value {
+      try? String(contentsOf: root.appendingPathComponent(relativePath), encoding: .utf8)
     }
-    return once.value {
-      guard let source = try? String(contentsOf: url, encoding: .utf8) else { return nil }
+  }
+
+  static func file(root: URL, relativePath: String) -> SourceFile? {
+    once(in: entries, root: root, relativePath: relativePath).value {
+      guard let source = text(root: root, relativePath: relativePath) else { return nil }
       parses.withLock { $0[root.path, default: 0] += 1 }
+      let url = root.appendingPathComponent(relativePath)
       return SourceFile(path: url.path, relativePath: relativePath, source: source)
+    }
+  }
+
+  private static func once<Value>(
+    in table: Locked<[String: Once<Value>]>, root: URL, relativePath: String
+  ) -> Once<Value> {
+    let key = root.path + "|" + relativePath
+    return table.withLock { table in
+      if let once = table[key] { return once }
+      let once = Once<Value>()
+      table[key] = once
+      return once
     }
   }
 
