@@ -153,6 +153,16 @@ import Testing
     #expect(codebase.productionCode.references(to: "URLSession").map(\.location.line) == [3])
   }
 
+  @Test func filesAreEqualWhenTheyAreTheSameFile() throws {
+    let codebase = try Fixture.codebase()
+    let feature = try #require(codebase.productionCode.in("Sources/App/Feature.swift").files.first)
+    let again = try #require(try Codebase(root: codebase.root).file("Sources/App/Feature.swift"))
+    #expect(feature == again)
+    #expect(Set(codebase.productionCode.structs.map(\.file)).count <= codebase.productionCode.files.count)
+    #expect(feature != codebase.file("Sources/App/Legacy.swift"))
+    #expect(SourceFile(path: "A.swift", source: "") != SourceFile(path: "A.swift", source: ""))
+  }
+
   @Test func filesCarryTheirRelativePath() throws {
     let file = try #require(try Fixture.codebase().productionCode.in("Sources/Model").files.first)
     #expect(file.relativePath == "Sources/Model/Item.swift")

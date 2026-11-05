@@ -30,6 +30,9 @@ minor release may break source compatibility, and each break is listed under **B
 - XCTest assertions: inside an `XCTestCase`, `expectNone(_:rule:baseline:)` and `expectAll(_:rule:baseline:_:)` are
   methods that record an XCTest failure at each violation's file and line, and stale baseline entries at the call
   site. `record(_:)` reports a `CheckResult` the same way.
+- `SourceFile` is `Hashable`, so rules can write `declaration.file == other.file` or build a `Set` of files. Equality
+  is identity: a codebase parses each path once per process, so its files compare like their paths, while in-memory
+  files made separately differ even with the same path.
 - A leading slash anchors a single name at the root (`/Sources`). It worked in `excluding(_:)` and `excludes` by
   accident; it is now documented and tested for all three.
 

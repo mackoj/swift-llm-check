@@ -70,6 +70,13 @@ public final class SourceFile: Sendable {
   }
 }
 
+/// Two files are equal when they are the same parsed file. A codebase parses each path once per process, so its files
+/// compare like their paths; in-memory files made separately differ even with the same path and text.
+extension SourceFile: Hashable {
+  public static func == (lhs: SourceFile, rhs: SourceFile) -> Bool { lhs === rhs }
+  public func hash(into hasher: inout Hasher) { hasher.combine(ObjectIdentifier(self)) }
+}
+
 private final class NodeCollector<Node: SyntaxProtocol>: SyntaxAnyVisitor {
   var found: [Syntax] = []
 
