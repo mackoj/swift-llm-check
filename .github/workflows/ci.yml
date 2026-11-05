@@ -1,0 +1,39 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Test (${{ matrix.name }})
+    runs-on: macos-15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: newest swift-syntax
+            pin: ""
+          - name: swift-syntax 601
+            pin: "601.0.1"
+    steps:
+      - uses: actions/checkout@v4
+      - name: Pin swift-syntax
+        if: matrix.pin != ''
+        run: sed -i '' 's/"601.0.0"..<"700.0.0"/exact: "${{ matrix.pin }}"/' Package.swift
+      - name: Toolchain
+        run: xcrun swift --version
+      - name: Test
+        run: xcrun swift test
+
+  lint:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: swift-format
+        run: xcrun swift-format lint --strict -r Package.swift Sources Tests
