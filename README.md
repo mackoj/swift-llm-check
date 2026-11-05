@@ -33,7 +33,7 @@ import PackageDescription
 let package = Package(
   name: "Architecture",
   platforms: [.macOS(.v14)],
-  dependencies: [.package(url: "https://github.com/mackoj/swift-llm-check.git", branch: "main")],
+  dependencies: [.package(url: "https://github.com/mackoj/swift-llm-check.git", from: "0.2.0")],
   targets: [
     .testTarget(name: "ArchitectureTests", dependencies: [.product(name: "LLMCheck", package: "swift-llm-check")])
   ]
@@ -211,10 +211,14 @@ anything nested in it). **An entry that no longer matches any finding fails as s
   concurrent tasks in two parallel suites.
 - Parsing runs on every core. `calls(named:)` and `references(to:)` skip files whose raw text does not contain the
   name, and `containing(_:)` does the same for declaration queries. Unread files are never parsed.
-- Each node-type search runs once per file and is cached.
+- Each node-type search runs once per file and is cached. Declarations are built on every core too.
 
-On [Telaio](https://github.com/mackoj/telaio), about 1,000 files and 220,000 lines, eight rules run in 0.7 s (1.6 s wall
-time for `swift test`). The same rules on Harmonize took 35 s.
+On [Telaio](https://github.com/mackoj/telaio), 992 files and 220,000 lines, eight rules run in 0.7 s (2.4 s wall time
+for a built `swift test`). The same rules on Harmonize took 35 s. Reading and parsing the whole tree cold takes 2.6 s
+in a debug build, almost all of it in swift-syntax's parser, which is unoptimized in debug; the rules stay fast because
+`containing(_:)` keeps most files unparsed. `swift test -c release` parses the whole tree in 0.05 s and runs the eight
+rules in 0.15 s, but compiling swift-syntax optimized adds about 100 s to a clean build, so it pays only where the
+build is cached.
 
 ## swift-syntax versions
 
@@ -240,7 +244,7 @@ violation is the part that helps agents most. swift-llm-check keeps that and cha
 | Calls | `functionCalls` sees whole-statement calls only | `nodes(of:)`/`calls(named:)` search the whole tree |
 | Location | File-level matches report line 1 | Exact line and column, with the offending line |
 | Swift 6 | Types not `Sendable` (`@preconcurrency import`) | Everything `Sendable` |
-| Speed (Telaio, 8 rules) | 35 s | 0.7 s |
+| Speed (Telaio, 8 rules, debug) | 35 s | 0.7 s |
 | swift-syntax | `601..<605` | `601..<700` |
 | Baselines | File names, fail when stale | File names, paths or `File.swift:Decl`, fail when stale |
 | XCTest | Assertions | Assertions, at the violation's file and line |
