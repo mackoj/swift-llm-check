@@ -27,7 +27,8 @@ public final class SourceFile: Sendable {
     let tree = Parser.parse(source: source)
     self.syntax = tree
     self.converter = SourceLocationConverter(fileName: path, tree: tree)
-    self.lines = source.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
+    // `\r\n` is one Character, so splitting on "\n" alone would leave a CRLF file as one line.
+    self.lines = source.split(omittingEmptySubsequences: false, whereSeparator: \.isLineBreak).map(String.init)
   }
 
   /// `Sidebar.swift` in `Sources/Sidebar/Sidebar.swift`.
@@ -116,4 +117,9 @@ enum ParseCache {
 
   /// How many files this process has parsed under a root, for tests.
   static func parseCount(root: URL) -> Int { parses.withLock { $0[root.path, default: 0] } }
+}
+
+extension Character {
+  /// The line breaks Swift's parser counts: `\n`, `\r` and `\r\n`, so line numbers agree with locations.
+  var isLineBreak: Bool { self == "\n" || self == "\r\n" || self == "\r" }
 }

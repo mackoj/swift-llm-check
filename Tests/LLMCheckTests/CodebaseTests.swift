@@ -19,6 +19,11 @@ import Testing
     #expect(configuration.testFolders == [])
   }
 
+  @Test func readsCRLFAndTabbedComments() throws {
+    let configuration = try Configuration(yaml: "excludes:\r\n  - build\t# tab, then a comment\r\n  - docs\r\n")
+    #expect(configuration.excludes == ["build", "docs"])
+  }
+
   @Test func defaultsWhenKeysAreMissing() throws {
     let configuration = try Configuration(yaml: "excludes:\n")
     #expect(configuration == Configuration())
