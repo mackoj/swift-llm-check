@@ -33,7 +33,7 @@ import PackageDescription
 let package = Package(
   name: "Architecture",
   platforms: [.macOS(.v14)],
-  dependencies: [.package(url: "https://github.com/mackoj/swift-llm-check.git", branch: "main")],
+  dependencies: [.package(url: "https://github.com/mackoj/swift-llm-check.git", from: "0.2.0")],
   targets: [
     .testTarget(name: "ArchitectureTests", dependencies: [.product(name: "LLMCheck", package: "swift-llm-check")])
   ]
@@ -80,7 +80,7 @@ extension Rule {
 
 @Suite struct LoggingRules {
   @Test func noPrint() throws {
-    let calls = try Codebase().productionCode.in("Sources").calls(named: "print").filter { $0.node.receiver == nil }
+    let calls = try Codebase().productionCode.in("/Sources").calls(named: "print").filter { $0.node.receiver == nil }
     expectNone(calls, rule: .noPrint)
   }
 }
@@ -93,11 +93,20 @@ let codebase = try Codebase()            // or Codebase(root: url)
 codebase.productionCode                  // everything that is not test code
 codebase.testCode                        // under a folder ending in Tests or named Fixtures
 codebase.allCode
-  .in("Packages/Features")               // from the root; several paths are a union, chained calls narrow
-  .excluding("DocumentFeature", "*.generated.swift")  // a name anywhere, a path from the root, or a * pattern
+  .in("Packages/Features")               // several patterns are a union, chained calls narrow
+  .excluding("DocumentFeature", "*.generated.swift")
   .containing("@Reducer")                // only files whose raw text contains this, before parsing
 Scope(files: [SourceFile(path: "A.swift", source: "…")])  // in-memory, to test a rule
 ```
+
+`in(_:)`, `excluding(_:)` and `excludes` read a pattern the same way, like a `.gitignore` line:
+
+| Pattern | Matches |
+|---|---|
+| `Models`, `Legacy.swift` | a folder or file with that name, at any depth |
+| `Packages/Features` | that path from the root, and everything under it |
+| `/Sources` | the top-level `Sources` folder only |
+| `*Tests`, `*.generated.swift`, `Sources/*/Models` | `*` is any run of characters inside one path component |
 
 ## Queries
 
@@ -133,14 +142,47 @@ scope.references(to: "URLSession", "FileManager")  // code only: comments and st
 statement.node.attachedComments              // the comments above a node and the one at the end of its line
 ```
 
-`import LLMCheck` re-exports SwiftSyntax, so node types need no other import. When a file also imports Testing,
-write `Testing.SourceLocation` if you need that type, because SwiftSyntax has one too.
+**SwiftSyntax is not re-exported.** `import LLMCheck` is enough for scopes, declarations, `calls(named:)`,
+`references(to:)`, `calledName`, `receiver` and the members of the nodes they return (`call.node.arguments`). A file
+that names a node type, such as `nodes(of: ForceUnwrapExprSyntax.self)` or `.is(InOutExprSyntax.self)`, adds
+`import SwiftSyntax`, and the test target lists the product:
+
+```swift
+dependencies: [
+  .package(url: "https://github.com/mackoj/swift-llm-check.git", from: "0.2.0"),
+  .package(url: "https://github.com/swiftlang/swift-syntax.git", "601.0.0"..<"700.0.0"),
+],
+targets: [
+  .testTarget(name: "ArchitectureTests", dependencies: [
+    .product(name: "LLMCheck", package: "swift-llm-check"),
+    .product(name: "SwiftSyntax", package: "swift-syntax"),
+  ])
+]
+```
+
+Why not re-export: SwiftSyntax and Testing both declare `SourceLocation`, so a re-export made every rule file that
+imports Testing write `Testing.SourceLocation`. Now only a file that imports both modules itself sees the clash.
 
 ## Assertions and baselines
 
 `expectNone(findings, rule:baseline:)` records one issue per finding. `expectAll(items, rule:baseline:) { … }` records
 one per item that fails the predicate. Both return a `CheckResult`. `rule.check(findings, baseline:)` computes the same
-result without recording anything, for XCTest or for your own reporting.
+result without recording anything, for your own reporting.
+
+**XCTest.** Inside an `XCTestCase`, the same calls are methods that record XCTest failures at the violation's file
+and line, and stale baseline entries at the call site:
+
+```swift
+import LLMCheck
+import XCTest
+
+final class LoggingRules: XCTestCase {
+  func testNoPrint() throws {
+    let calls = try Codebase().productionCode.calls(named: "print").filter { $0.node.receiver == nil }
+    expectNone(calls, rule: .noPrint)
+  }
+}
+```
 
 A baseline lets a rule land before every violation is fixed. An entry is a file name (`Sidebar.swift`), a path or the
 end of one (`Feature/Sidebar.swift`), or a file and a declaration (`Sidebar.swift:SidebarFeature.State`, which covers
@@ -169,10 +211,14 @@ anything nested in it). **An entry that no longer matches any finding fails as s
   concurrent tasks in two parallel suites.
 - Parsing runs on every core. `calls(named:)` and `references(to:)` skip files whose raw text does not contain the
   name, and `containing(_:)` does the same for declaration queries. Unread files are never parsed.
-- Each node-type search runs once per file and is cached.
+- Each node-type search runs once per file and is cached. Declarations are built on every core too.
 
-On [Telaio](https://github.com/mackoj/telaio), about 1,000 files and 220,000 lines, eight rules run in 0.7 s (1.6 s wall
-time for `swift test`). The same rules on Harmonize took 35 s.
+On [Telaio](https://github.com/mackoj/telaio), 992 files and 220,000 lines, eight rules run in 0.7 s (2.4 s wall time
+for a built `swift test`). The same rules on Harmonize took 35 s. Reading and parsing the whole tree cold takes 2.6 s
+in a debug build, almost all of it in swift-syntax's parser, which is unoptimized in debug; the rules stay fast because
+`containing(_:)` keeps most files unparsed. `swift test -c release` parses the whole tree in 0.05 s and runs the eight
+rules in 0.15 s, but compiling swift-syntax optimized adds about 100 s to a clean build, so it pays only where the
+build is cached.
 
 ## swift-syntax versions
 
@@ -198,12 +244,13 @@ violation is the part that helps agents most. swift-llm-check keeps that and cha
 | Calls | `functionCalls` sees whole-statement calls only | `nodes(of:)`/`calls(named:)` search the whole tree |
 | Location | File-level matches report line 1 | Exact line and column, with the offending line |
 | Swift 6 | Types not `Sendable` (`@preconcurrency import`) | Everything `Sendable` |
-| Speed (Telaio, 8 rules) | 35 s | 0.7 s |
+| Speed (Telaio, 8 rules, debug) | 35 s | 0.7 s |
 | swift-syntax | `601..<605` | `601..<700` |
 | Baselines | File names, fail when stale | File names, paths or `File.swift:Decl`, fail when stale |
+| XCTest | Assertions | Assertions, at the violation's file and line |
 | Dependencies | swift-syntax, Yams | swift-syntax |
 
-Harmonize has a larger declaration model (properties, accessors, function bodies as objects) and XCTest assertions.
+Harmonize has a larger declaration model (properties, accessors, function bodies as objects).
 swift-llm-check stays small and gives you the SwiftSyntax node when you need more.
 
 ## Development

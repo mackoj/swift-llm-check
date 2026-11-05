@@ -96,6 +96,15 @@ import Testing
     #expect(calls[0].snippet == "track()")
   }
 
+  @Test func snippetsFollowTheParsersLines() {
+    for newline in ["\n", "\r\n", "\r"] {
+      let source = ["let a = 1", "  track(1)", "let b = 2", "track(2)"].joined(separator: newline)
+      let calls = Scope(files: [file(source)]).calls(named: "track")
+      #expect(calls.map(\.location.line) == [2, 4])
+      #expect(calls.map(\.snippet) == ["track(1)", "track(2)"])
+    }
+  }
+
   @Test func readsAttachedComments() throws {
     let scope = Scope(files: [
       file(

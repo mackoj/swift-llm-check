@@ -22,7 +22,7 @@ let package = Package(
     ),
     .testTarget(
       name: "LLMCheckTests",
-      dependencies: ["LLMCheck"],
+      dependencies: ["LLMCheck", .product(name: "SwiftSyntax", package: "swift-syntax")],
       exclude: ["Fixtures"]
     ),
   ]

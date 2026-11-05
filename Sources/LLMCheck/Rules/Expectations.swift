@@ -45,20 +45,20 @@ public func record(_ result: CheckResult, sourceLocation: Testing.SourceLocation
     Issue.record(Comment(rawValue: message(for: finding, rule: result.rule)), sourceLocation: finding.sourceLocation)
   }
   for entry in result.staleEntries {
-    Issue.record(
-      Comment(
-        rawValue: """
-          Stale baseline entry "\(entry)" for \(result.rule.id): nothing there breaks "\(result.rule.title)" any \
-          more. Remove the entry.
-          """),
-      sourceLocation: sourceLocation
-    )
+    Issue.record(Comment(rawValue: staleMessage(for: entry, rule: result.rule)), sourceLocation: sourceLocation)
   }
 }
 
 /// The text recorded for one violation: where, the offending line, then the rule.
 public func message(for finding: any Finding, rule: Rule) -> String {
   "\(finding.location): \(finding.snippet)\n\n\(rule.formatted)"
+}
+
+/// The text recorded for a baseline entry that matches nothing.
+func staleMessage(for entry: String, rule: Rule) -> String {
+  """
+  Stale baseline entry "\(entry)" for \(rule.id): nothing there breaks "\(rule.title)" any more. Remove the entry.
+  """
 }
 
 extension Finding {

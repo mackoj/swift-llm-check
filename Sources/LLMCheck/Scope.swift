@@ -32,17 +32,19 @@ public struct Scope: Sendable {
     base = .files(files)
   }
 
-  /// Only the files under one of `paths`, each from the root: `in("Packages/Foo")`, `in("Sources/*/Models")`, or a
-  /// file. Chained calls narrow further.
-  public func `in`(_ paths: String...) -> Scope { self.in(paths) }
+  /// Only the files that match one of `patterns`, read like ``excluding(_:)-(String...)`` and `excludes`: a name
+  /// matches any folder or file (`in("Models")`), a path with a slash matches from the root (`in("Packages/Foo")`,
+  /// `in("/Sources")` for the top-level folder only), and `*` is a wildcard. Chained calls narrow further.
+  public func `in`(_ patterns: String...) -> Scope { self.in(patterns) }
 
-  public func `in`(_ paths: [String]) -> Scope {
+  public func `in`(_ patterns: [String]) -> Scope {
     var scope = self
-    scope.inclusions.append(paths)
+    scope.inclusions.append(patterns)
     return scope
   }
 
-  /// Without the files that match any of `patterns`: a folder or file name, a path from the root, or a `*` pattern.
+  /// Without the files that match any of `patterns`: a name matches any folder or file, a path with a slash matches
+  /// from the root, and `*` is a wildcard. See ``in(_:)-(String...)``.
   public func excluding(_ patterns: String...) -> Scope { excluding(patterns) }
 
   public func excluding(_ patterns: [String]) -> Scope {
@@ -102,14 +104,14 @@ public struct Scope: Sendable {
   }
 
   private func includes(_ path: String) -> Bool {
-    inclusions.allSatisfy { group in group.contains { PathPattern.matches($0, path, anchored: true) } }
+    inclusions.allSatisfy { group in group.contains { PathPattern.matches($0, path) } }
       && !exclusions.contains { PathPattern.matches($0, path) }
   }
 
   // MARK: Declarations
 
-  /// The top-level declarations of every file.
-  public var topLevelDeclarations: [Declaration] { files.flatMap(\.declarations) }
+  /// The top-level declarations of every file, built on every core.
+  public var topLevelDeclarations: [Declaration] { Array(concurrentMap(files) { $0.declarations }.joined()) }
 
   /// Every declaration, nested ones included, depth first.
   public var declarations: [Declaration] { topLevelDeclarations.flatMap { [$0] + $0.descendants } }

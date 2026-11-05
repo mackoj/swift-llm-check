@@ -36,7 +36,7 @@ public struct Configuration: Sendable, Hashable {
     self.init()
     var lists: [String: [String]] = [:]
     var key: String?
-    for (number, rawLine) in yaml.split(separator: "\n", omittingEmptySubsequences: false).enumerated() {
+    for (number, rawLine) in yaml.split(omittingEmptySubsequences: false, whereSeparator: \.isLineBreak).enumerated() {
       let line = Self.stripComment(String(rawLine))
       let trimmed = line.trimmingCharacters(in: .whitespaces)
       if trimmed.isEmpty { continue }
@@ -78,7 +78,7 @@ public struct Configuration: Sendable, Hashable {
 
   private static func stripComment(_ line: String) -> String {
     guard let hash = line.firstIndex(of: "#") else { return line }
-    if hash == line.startIndex || line[line.index(before: hash)] == " " { return String(line[..<hash]) }
+    if hash == line.startIndex || line[line.index(before: hash)].isWhitespace { return String(line[..<hash]) }
     return line
   }
 
