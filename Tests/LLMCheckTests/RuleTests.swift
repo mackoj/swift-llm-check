@@ -36,6 +36,32 @@ import Testing
     #expect(Rule.sample.check(calls, baseline: ["Other.swift:Feature"]).violations.count == 3)
   }
 
+  @Test func baselineCoveringFindingsAcceptsExactlyThem() {
+    let calls = scope.calls(named: "track")
+    let baseline = Baseline(covering: calls)
+    #expect(baseline.entries == ["Feature.swift:Feature.a", "Feature.swift:Feature.b", "Other.swift:x"])
+    #expect(Rule.sample.check(calls, baseline: baseline).passed)
+
+    let later = Scope(files: [
+      file(
+        """
+        struct Feature {
+          func a() { track() }
+          func b() { track() }
+          func c() { track() }
+        }
+        """, path: "Sources/App/Feature.swift"),
+      file("let x = track()", path: "Sources/Other/Other.swift"),
+    ])
+    #expect(Rule.sample.check(later.calls(named: "track"), baseline: baseline).violations.map(\.location.line) == [4])
+  }
+
+  @Test func baselineRendersAsASwiftArrayLiteral() {
+    #expect(Baseline(["A.swift:A", "B.swift"]).swiftArrayLiteral == "[\n  \"A.swift:A\",\n  \"B.swift\",\n]")
+    #expect(Baseline([]).swiftArrayLiteral == "[]")
+    #expect(Baseline(covering: [] as [any Finding]).entries.isEmpty)
+  }
+
   @Test func reportsStaleEntriesOnce() {
     let result = Rule.sample.check(
       scope.calls(named: "track"), baseline: ["Feature.swift", "Other.swift", "Gone.swift", "Gone.swift"])

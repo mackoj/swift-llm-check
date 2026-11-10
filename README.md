@@ -136,8 +136,12 @@ scope.nodes(of: CodeBlockItemSyntax.self) { $0.node.item.is(ExprSyntax.self) }
 
 ```swift
 scope.calls(named: "withKnownIssue")         // `await withKnownIssue { }`, `return .run { await f() }`…
+scope.calls(named: names)                    // a Set<String> built at run time
 call.node.calledName                         // "apply" in `edit.apply(to: &doc)`
 call.node.receiver                           // `edit`; nil for `print(x)`
+call.node.argument(labeled: "database")      // `database: db` in `load(r, database: db)`
+call.node.passesClosure                      // `db.read { }`, `run(work: { })`
+call.node.isAwaited                          // `try await f()`, `(try? await f()) ?? []`; not `Task { f() }`
 scope.references(to: "URLSession", "FileManager")  // code only: comments and strings never match
 statement.node.attachedComments              // the comments above a node and the one at the end of its line
 ```
@@ -187,6 +191,15 @@ final class LoggingRules: XCTestCase {
 A baseline lets a rule land before every violation is fixed. An entry is a file name (`Sidebar.swift`), a path or the
 end of one (`Feature/Sidebar.swift`), or a file and a declaration (`Sidebar.swift:SidebarFeature.State`, which covers
 anything nested in it). **An entry that no longer matches any finding fails as stale**, so baselines only shrink.
+
+To start one, build it from today's findings and paste the output into the test once:
+
+```swift
+print(Baseline(covering: findings).swiftArrayLiteral)   // ["Sidebar.swift:SidebarFeature.State", …]
+```
+
+`Baseline(covering:)` names each finding's file and innermost declaration, so a new violation elsewhere in the same
+file still fails.
 
 ## Rules for agents before they fail
 

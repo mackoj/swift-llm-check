@@ -128,4 +128,46 @@ import Testing
     #expect(statements[0].node.leadingComments == ["// Why it is off."])
     #expect(statements[1].node.trailingComments == ["// Trailing reason."])
   }
+
+  @Test func findsCallsFromANameSetBuiltAtRunTime() {
+    let scope = Scope(files: [file("db.read { }; db.write { }; db.vacuum(); print(1)")])
+    let names: Set<String> = ["read", "write"]
+    #expect(scope.calls(named: names).map(\.node.calledName) == ["read", "write"])
+    #expect(scope.calls(named: ["vacuum"]).count == 1)
+  }
+
+  @Test func findsArgumentsByLabel() throws {
+    let call = try #require(
+      Scope(files: [file("load(r, database: db, scheduler: .async) { }")]).calls(named: "load").first)
+    #expect(call.node.argument(labeled: "database")?.expression.trimmedDescription == "db")
+    #expect(call.node.argument(labeled: "scheduler")?.expression.trimmedDescription == ".async")
+    #expect(call.node.argument(labeled: "animation") == nil)
+  }
+
+  @Test func seesClosuresHoweverTheyArePassed() {
+    let calls = Scope(files: [
+      file("a { }; b(work: { }); c(1); d { } onError: { }; e(f)")
+    ]).nodes(of: FunctionCallExprSyntax.self)
+    #expect(calls.map(\.node.passesClosure) == [true, true, false, true, false])
+  }
+
+  @Test func awaitedMeansUnderAnAwaitInItsOwnExpression() {
+    let scope = Scope(files: [
+      file(
+        """
+        func f() async throws {
+          try await read(1)
+          let a = (try? await read(2)) ?? []
+          _ = await [read(3)]
+          try read(4)
+          Task { try read(5) }
+          try await perform { try read(6) }
+          let b = read(7)
+        }
+        struct S { var v: Int { read(8) } }
+        """)
+    ])
+    let awaited = scope.calls(named: "read").filter(\.node.isAwaited).map(\.location.line)
+    #expect(awaited == [2, 3, 4])
+  }
 }
