@@ -3,6 +3,20 @@
 All notable changes to swift-llm-check. The project follows [Semantic Versioning](https://semver.org); before 1.0, a
 minor release may break source compatibility, and each break is listed under **Breaking** with how to migrate.
 
+## Unreleased
+
+### Added
+
+- `isAwaited` on any node: whether it sits under an `await` in its own expression (`try await f()`,
+  `(try? await f()) ?? []`). The search stops at the enclosing statement, closure or declaration, so a call inside
+  `Task { }` or inside an awaited call's closure is not awaited. For rules such as "database access is awaited".
+- `FunctionCallExprSyntax.argument(labeled:)` returns the argument with a label, and `passesClosure` says whether a
+  closure is passed, trailing or as an argument.
+- `Scope.calls(named:)` takes a `Set<String>`, for a list of names built at run time.
+- `Baseline(covering:)` builds a baseline that accepts exactly the given findings, one `File.swift:Declaration` entry
+  each, and `swiftArrayLiteral` renders it for pasting into a test. It lands a rule on code that already breaks it
+  without hand-writing the entries.
+
 ## 0.2.0 (2026-11-06)
 
 ### Breaking

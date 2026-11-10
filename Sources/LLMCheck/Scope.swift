@@ -151,9 +151,11 @@ public struct Scope: Sendable {
 
   /// Calls whose called name (``SwiftSyntax/FunctionCallExprSyntax/calledName``) is one of `names`: `print(x)`,
   /// `edit.apply(to:)`, `await withKnownIssue { }`, wherever they are.
-  public func calls(named names: String...) -> [Match<FunctionCallExprSyntax>] {
-    let set = Set(names)
-    return containing(names).nodes(of: FunctionCallExprSyntax.self) { $0.node.calledName.map(set.contains) ?? false }
+  public func calls(named names: String...) -> [Match<FunctionCallExprSyntax>] { calls(named: Set(names)) }
+
+  /// ``calls(named:)-(String...)`` for a list built at run time: `scope.calls(named: accessNames)`.
+  public func calls(named names: Set<String>) -> [Match<FunctionCallExprSyntax>] {
+    containing(Array(names)).nodes(of: FunctionCallExprSyntax.self) { $0.node.calledName.map(names.contains) ?? false }
   }
 
   /// Code that names one of `names`: an expression (`URLSession.shared`, `.init`'s `Foo`) or a type (`let x: Foo`,
@@ -189,5 +191,36 @@ extension FunctionCallExprSyntax {
   /// `edit` in `edit.apply(to:)`; nil for a free call like `print(x)` or an implicit member like `.init()`.
   public var receiver: ExprSyntax? {
     calledExpression.as(MemberAccessExprSyntax.self)?.base
+  }
+
+  /// The argument with this label: `database: db` for `argument(labeled: "database")` in `load(r, database: db)`.
+  /// Nil when no argument has it. Unlabeled arguments and trailing closures never match.
+  public func argument(labeled label: String) -> LabeledExprSyntax? {
+    arguments.first { $0.label?.text == label }
+  }
+
+  /// A closure is passed, as a trailing closure (`db.read { }`) or as an argument (`db.read(work: { })`).
+  public var passesClosure: Bool {
+    trailingClosure != nil || !additionalTrailingClosures.isEmpty
+      || arguments.contains { $0.expression.is(ClosureExprSyntax.self) }
+  }
+}
+
+extension SyntaxProtocol {
+  /// Whether this node is under an `await` in its own expression: `try await f()`, `(try? await f()) ?? []`,
+  /// `let x = await f()`. The search stops at the enclosing statement, closure or declaration, so being somewhere in an
+  /// async function, or in an awaited call's closure, does not count: in `await g { f() }`, `f()` is not awaited.
+  public var isAwaited: Bool {
+    var current = Syntax(self).parent
+    while let node = current {
+      if node.is(AwaitExprSyntax.self) { return true }
+      if node.is(CodeBlockItemSyntax.self) || node.is(ClosureExprSyntax.self) || node.is(MemberBlockItemSyntax.self)
+        || node.is(AccessorBlockSyntax.self)
+      {
+        return false
+      }
+      current = node.parent
+    }
+    return false
   }
 }

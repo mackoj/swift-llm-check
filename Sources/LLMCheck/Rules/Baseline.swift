@@ -12,6 +12,28 @@ public struct Baseline: Sendable, Hashable, ExpressibleByArrayLiteral {
   public init(_ entries: [String]) { self.entries = entries }
   public init(arrayLiteral entries: String...) { self.entries = entries }
 
+  /// A baseline that accepts exactly `findings`, to land a rule on code that already breaks it. Each entry is the
+  /// finding's file and innermost declaration (`Sidebar.swift:SidebarFeature.State`), or the file alone for a finding
+  /// outside any declaration, so a new violation elsewhere in the same file still fails. Entries are sorted and unique.
+  ///
+  /// Print it once and paste the result into the rule's test:
+  /// ```swift
+  /// print(Baseline(covering: findings).swiftArrayLiteral)
+  /// ```
+  public init(covering findings: [any Finding]) {
+    let entries = findings.map { finding in
+      finding.declarationNames.first.map { "\(finding.location.fileName):\($0)" } ?? finding.location.fileName
+    }
+    self.entries = Array(Set(entries)).sorted()
+  }
+
+  /// The entries as a Swift array literal, one per line: paste it after `let baseline: Baseline = `.
+  public var swiftArrayLiteral: String {
+    guard !entries.isEmpty else { return "[]" }
+    let quoted = entries.map { "  \"" + $0.replacingOccurrences(of: "\"", with: "\\\"") + "\"," }
+    return (["["] + quoted + ["]"]).joined(separator: "\n")
+  }
+
   /// Whether `entry` covers `finding`.
   public static func entry(_ entry: String, matches finding: any Finding) -> Bool {
     let file: Substring
