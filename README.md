@@ -270,6 +270,13 @@ violation is the part that helps agents most. swift-llm-check keeps that and cha
 Harmonize has a larger declaration model (properties, accessors, function bodies as objects).
 swift-llm-check stays small and gives you the SwiftSyntax node when you need more.
 
+## In use
+
+[Telaio](https://github.com/mackoj/telaio), [forum-offline](https://github.com/mackoj/forum-offline) and
+[swift-arazzo](https://github.com/mackoj/swift-arazzo) run their rules on swift-llm-check.
+[docs/adoption-notes.md](docs/adoption-notes.md) compares how each set it up, the recipe they share, and the helpers
+that moved from their rules into the library.
+
 ## Development
 
 ```sh
