@@ -142,6 +142,10 @@ call.node.receiver                           // `edit`; nil for `print(x)`
 call.node.argument(labeled: "database")      // `database: db` in `load(r, database: db)`
 call.node.passesClosure                      // `db.read { }`, `run(work: { })`
 call.node.isAwaited                          // `try await f()`, `(try? await f()) ?? []`; not `Task { f() }`
+scope.imports(of: "Foundation", "Yams")      // `import Foundation`, `import struct Foundation.URL`, in `#if` too
+scope.imports                                // every import; `import.node.moduleName` is `Foundation`
+node.enclosingIfConfigClauses                // the `#if`/`#elseif`/`#else` clauses around a node, innermost first
+clause.ifCondition, clause.isElse            // `canImport(FoundationEssentials)` and true for that `#if`'s `#else`
 scope.references(to: "URLSession", "FileManager")  // code only: comments and strings never match
 statement.node.attachedComments              // the comments above a node and the one at the end of its line
 ```

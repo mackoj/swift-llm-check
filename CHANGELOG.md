@@ -3,6 +3,17 @@
 All notable changes to swift-llm-check. The project follows [Semantic Versioning](https://semver.org); before 1.0, a
 minor release may break source compatibility, and each break is listed under **Breaking** with how to migrate.
 
+## Unreleased
+
+### Added
+
+- `Scope.imports` and `Scope.imports(of:)` find `import` declarations, inside `#if` blocks too, and
+  `ImportDeclSyntax.moduleName` reads `Foundation` from `import struct Foundation.URL`. For rules such as "the core
+  target imports only its declared dependencies".
+- `enclosingIfConfigClauses` on any node lists the `#if`/`#elseif`/`#else` clauses it is compiled under, and
+  `IfConfigClauseSyntax.ifCondition` and `isElse` say which branch of which `#if` a clause is. For rules such as
+  "`import Foundation` only as the `#else` of `#if canImport(FoundationEssentials)`".
+
 ## 0.3.0 (2026-11-10)
 
 ### Added

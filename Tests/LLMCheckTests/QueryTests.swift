@@ -171,3 +171,53 @@ import Testing
     #expect(awaited == [2, 3, 4])
   }
 }
+
+@Suite struct ImportQueryTests {
+  @Test func findsImportsInsideIfConfigBlocks() {
+    let scope = Scope(files: [
+      file(
+        """
+        import JSONPath
+        @preconcurrency import struct Foundation.URL
+        #if canImport(FoundationEssentials)
+        import FoundationEssentials
+        #else
+        import Foundation
+        #endif
+        // import Yams in a comment
+        let s = "import Yams in a string"
+        """)
+    ])
+    #expect(scope.imports.map(\.node.moduleName) == ["JSONPath", "Foundation", "FoundationEssentials", "Foundation"])
+    #expect(scope.imports(of: "Foundation").map(\.location.line) == [2, 6])
+    #expect(scope.imports(of: "Yams").isEmpty)
+  }
+
+  @Test func readsTheClausesAroundANode() throws {
+    let imports = Scope(files: [
+      file(
+        """
+        import JSONPath
+        #if canImport(FoundationEssentials)
+        import FoundationEssentials
+        #elseif os(Linux)
+        import Glibc
+        #else
+        #if YAML
+        import Yams
+        #endif
+        #endif
+        """)
+    ]).imports
+    let clauses = imports.map { $0.node.enclosingIfConfigClauses }
+    #expect(clauses.map(\.count) == [0, 1, 1, 2])
+    #expect(
+      clauses.map { $0.first?.ifCondition } == [
+        nil, "canImport(FoundationEssentials)", "canImport(FoundationEssentials)", "YAML",
+      ])
+    #expect(clauses.map { $0.first?.isElse } == [nil, false, false, false])
+    let yams = try #require(clauses.last)
+    #expect(yams.map(\.isElse) == [false, true])
+    #expect(yams.last?.ifCondition == "canImport(FoundationEssentials)")
+  }
+}
