@@ -33,9 +33,17 @@ jobs:
       - name: Test
         run: xcrun swift test
 
+  architecture:
+    name: Architecture rules
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Rules (the library checks itself)
+        run: xcrun swift test --package-path Architecture
+
   lint:
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
       - name: swift-format
-        run: xcrun swift-format lint --strict -r Package.swift Sources Tests
+        run: xcrun swift-format lint --strict -r Package.swift Sources Tests Architecture/Package.swift Architecture/Tests

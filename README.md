@@ -274,8 +274,8 @@ swift-llm-check stays small and gives you the SwiftSyntax node when you need mor
 ## In use
 
 [Telaio](https://github.com/mackoj/telaio), [forum-offline](https://github.com/mackoj/forum-offline),
-[swift-arazzo](https://github.com/mackoj/swift-arazzo) and [swift-jsonpath](https://github.com/mackoj/swift-jsonpath)
-run their rules on swift-llm-check.
+[swift-arazzo](https://github.com/mackoj/swift-arazzo), [swift-jsonpath](https://github.com/mackoj/swift-jsonpath)
+and swift-llm-check itself (`Architecture/`) run their rules on swift-llm-check.
 [docs/adoption-notes.md](docs/adoption-notes.md) compares how each set it up, the recipe they share, and the helpers
 that moved from their rules into the library.
 
@@ -283,5 +283,11 @@ that moved from their rules into the library.
 
 ```sh
 xcrun swift test
-xcrun swift-format lint --strict -r Package.swift Sources Tests
+xcrun swift test --package-path Architecture
+xcrun swift-format lint --strict -r Package.swift Sources Tests Architecture/Package.swift Architecture/Tests
 ```
+
+The library checks itself. `Architecture/` holds swift-llm-check's own rules, written with the working copy of the
+library: the dependency budget, no re-export, `Sendable` public types, locks only in `Support/Locked.swift`, no
+`print`, and how its tests use XCTest and `withKnownIssue`. They are listed in
+[docs/architecture-rules.md](docs/architecture-rules.md), generated from the rules.

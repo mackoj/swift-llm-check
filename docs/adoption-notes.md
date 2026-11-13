@@ -1,20 +1,21 @@
 # Adoption notes
 
-How four repositories adopted swift-llm-check, what they have in common, and what a future guide should say. These are
-working notes, written from the code and history of each repository on 2026-11-13. The README stays the reference;
-this file collects material for a "Adopting swift-llm-check" guide.
+How four repositories and the library itself adopted swift-llm-check, what they have in common, and what a future
+guide should say. These are working notes, written from the code and history of each repository on 2026-11-13 (the
+library itself on 2026-11-14). The README stays the reference; this file collects material for a "Adopting
+swift-llm-check" guide.
 
-| | [Telaio](https://github.com/mackoj/telaio) | [forum-offline](https://github.com/mackoj/forum-offline) | [swift-arazzo](https://github.com/mackoj/swift-arazzo) | [swift-jsonpath](https://github.com/mackoj/swift-jsonpath) |
-|---|---|---|---|---|
-| Kind | macOS app, TCA, 992 files | iOS app, SQLiteData/GRDB | Swift library, Linux and Swift 6.0 support | Swift library, no imports at all, Linux and Swift 6.0 support |
-| Package | `Packages/TelaioArchitecture` | `Architecture/` | `Architecture/` | `Architecture/` |
-| Rules | 19, in 7 categories | 4, one category (`database`) | 8, in 4 categories | 9, in 4 categories |
-| Rules come from | PLAN, decision records (D-…), owner issues | profiling hangs (Time Profiler, Hangs) | `CODING_STANDARDS.md`, `CONSTRAINTS.md` | `CODING_STANDARDS.md`, `CONSTRAINTS.md` |
-| First run | 29 findings, all fixed or decided | 85 sync accesses and 11 loads, all fixed | 0 findings | 2 findings (coders not `Sendable`), fixed |
-| Baseline today | none | none | none | none |
-| Runs from | `scripts/test.sh` on any Swift change, `scripts/ci.sh` | by hand before every push (`AGENTS.md`) | CI's macOS job | CI's macOS job |
-| Rules document | `Packages/TelaioArchitecture/RULES.md` | `ForumOfflineReader/docs/architecture-rules.md` | `docs/architecture-rules.md` | `docs/architecture-rules.md` |
-| Gave back to the library | the library itself (ported from a Harmonize pilot) | `isAwaited`, `passesClosure`, `argument(labeled:)` (#4, 0.3.0) | `imports(of:)`, `enclosingIfConfigClauses` (#6, 0.4.0) | `Match.erased` |
+| | [Telaio](https://github.com/mackoj/telaio) | [forum-offline](https://github.com/mackoj/forum-offline) | [swift-arazzo](https://github.com/mackoj/swift-arazzo) | [swift-jsonpath](https://github.com/mackoj/swift-jsonpath) | [swift-llm-check](https://github.com/mackoj/swift-llm-check) |
+|---|---|---|---|---|---|
+| Kind | macOS app, TCA, 992 files | iOS app, SQLiteData/GRDB | Swift library, Linux and Swift 6.0 support | Swift library, no imports at all, Linux and Swift 6.0 support | this library, dogfooding |
+| Package | `Packages/TelaioArchitecture` | `Architecture/` | `Architecture/` | `Architecture/` | `Architecture/`, on the working copy (`path: ".."`) |
+| Rules | 19, in 7 categories | 4, one category (`database`) | 8, in 4 categories | 9, in 4 categories | 9, in 4 categories |
+| Rules come from | PLAN, decision records (D-…), owner issues | profiling hangs (Time Profiler, Hangs) | `CODING_STANDARDS.md`, `CONSTRAINTS.md` | `CODING_STANDARDS.md`, `CONSTRAINTS.md` | promises in the README and CHANGELOG |
+| First run | 29 findings, all fixed or decided | 85 sync accesses and 11 loads, all fixed | 0 findings | 2 findings (coders not `Sendable`), fixed | 0 findings |
+| Baseline today | none | none | none | none | none |
+| Runs from | `scripts/test.sh` on any Swift change, `scripts/ci.sh` | by hand before every push (`AGENTS.md`) | CI's macOS job | CI's macOS job | CI's `architecture` job |
+| Rules document | `Packages/TelaioArchitecture/RULES.md` | `ForumOfflineReader/docs/architecture-rules.md` | `docs/architecture-rules.md` | `docs/architecture-rules.md` | `docs/architecture-rules.md` |
+| Gave back to the library | the library itself (ported from a Harmonize pilot) | `isAwaited`, `passesClosure`, `argument(labeled:)` (#4, 0.3.0) | `imports(of:)`, `enclosingIfConfigClauses` (#6, 0.4.0) | `Match.erased` | `inherits(from:)` sees `@unchecked Sendable` |
 
 ## The recipe they share
 
@@ -152,6 +153,33 @@ A second library adoption, copied from swift-arazzo's shape on the first try.
   the planted line.
 - **Gave back.** `Match.erased`, for the no-I/O rule that merges `references(to:)` and `calls(named:)`.
 
+## swift-llm-check itself
+
+The library checks itself, with the recipe above and one difference: the rules package depends on the working copy.
+
+- **Why.** The README makes promises a reviewer has to remember: the only dependency is swift-syntax's parser,
+  SwiftSyntax is not re-exported (0.2.0), everything public is `Sendable`, the caches never wait on one another. The
+  rules make each promise fail at the line that breaks it, and each rationale cites the README or CHANGELOG section.
+- **Rules.** `dependencies` (`Sources` imports only Foundation, Dispatch, SwiftSyntax, SwiftParser, Testing and XCTest;
+  XCTest only under `#if canImport(XCTest)`; no `@_exported import`), `concurrency` (public types are `Sendable`,
+  directly or through `Finding` or `Error`; `@unchecked Sendable` has a comment; locks, semaphores and dispatch queues
+  only in `Support/Locked.swift`), `reporting` (no `print`), `testing` (XCTest only in `XCTestExpectationsTests.swift`;
+  `withKnownIssue` names its issue or pins it with `matching:`).
+- **`path: ".."`.** `.package(name: "swift-llm-check", path: "..")` builds the rules against the code they check, so
+  a change to a query is run by the rules in the same pull request. The cost: a planted violation must compile, since
+  the library under check is built too (`import SwiftSyntaxBuilder` does not; `import Darwin` does).
+- **A rule adapted to the repository.** The library's own tests use `withKnownIssue` on purpose, to check what
+  `expectNone` records. swift-arazzo's `known-issues-explain-themselves` would flag all four; here a `matching:`
+  closure that pins the expected issue counts as the explanation.
+- **What the sanity counts caught.** `scope.in("Support/Locked.swift")` matched nothing: a pattern with a slash is
+  anchored at the root, as the README says. The count (`== 1`, "Locked.swift moved") failed before the rule could
+  pass on the wrong scope. A guide should show a root-anchored path in its first example.
+- **Checked like swift-arazzo.** One violation per rule planted in `Sources` and `Tests`; all nine failed at the
+  planted line.
+- **Gave back.** `Declaration.inherits(from: "Sendable")` was false for `@unchecked Sendable`, since `inheritance`
+  keeps the clause as written. The `Sendable` detector stripped the attribute itself; the library now sees through
+  `@unchecked`, `@retroactive` and `@preconcurrency`.
+
 ## The loop between repositories and the library
 
 Each adoption writes a helper, and a general one moves into the library:
@@ -168,7 +196,8 @@ Still local, and worth a look for the library:
 - Telaio's modifier-chain helpers (`modifierNames`, `unmodified`, `chainNames`), for SwiftUI rules.
 - Rules copied between repositories. swift-arazzo and swift-jsonpath carry the same four `Rule`s and detectors
   (Swift Testing only, no `.disabled`, `withKnownIssue` names its issue, `@unchecked Sendable` has a comment), and
-  Telaio has its own `known-issues-explain-themselves`. A small set of ready-made rules, with a project-specific
+  Telaio and swift-llm-check have their own `known-issues-explain-themselves` (the latter accepting `matching:`).
+  swift-llm-check's `Architecture/` carries `unchecked-sendable-explains-itself` word for word too. A small set of ready-made rules, with a project-specific
   rationale passed in, would end the copying.
 - A sort by location for merged findings. Combining findings of different node types is `Match.erased` now (from
   swift-jsonpath's adoption); the merged array is still in the order the queries ran.
