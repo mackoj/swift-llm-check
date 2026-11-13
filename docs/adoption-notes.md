@@ -14,7 +14,7 @@ this file collects material for a "Adopting swift-llm-check" guide.
 | Baseline today | none | none | none |
 | Runs from | `scripts/test.sh` on any Swift change, `scripts/ci.sh` | by hand before every push (`AGENTS.md`) | CI's macOS job |
 | Rules document | `Packages/TelaioArchitecture/RULES.md` | `ForumOfflineReader/docs/architecture-rules.md` | `docs/architecture-rules.md` |
-| Gave back to the library | the library itself (ported from a Harmonize pilot) | `isAwaited`, `passesClosure`, `argument(labeled:)` (#4, 0.3.0) | `imports(of:)`, `enclosingIfConfigClauses` (#6) |
+| Gave back to the library | the library itself (ported from a Harmonize pilot) | `isAwaited`, `passesClosure`, `argument(labeled:)` (#4, 0.3.0) | `imports(of:)`, `enclosingIfConfigClauses` (#6, 0.4.0) |
 
 ## The recipe they share
 
@@ -129,7 +129,7 @@ A library adoption, where the rules restate written standards rather than fix fo
   gained `Architecture`. `.gitignore` anchored `/.build` at the root, so `Architecture/.build` needed its own line.
 - **Gave back.** Two rules need an import and the `#if` branch it is in. The local helpers became `Scope.imports`,
   `imports(of:)`, `ImportDeclSyntax.moduleName`, `enclosingIfConfigClauses`, `IfConfigClauseSyntax.ifCondition` and
-  `isElse` (#6). Once a release ships them, the local copies go, as forum-offline's did.
+  `isElse` (#6). swift-arazzo#11 moved to 0.4.0 and deleted its copies, as forum-offline's #179 did.
 
 ## The loop between repositories and the library
 
