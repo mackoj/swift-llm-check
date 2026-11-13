@@ -50,6 +50,22 @@ import Testing
     #expect(source.declarations.named("helper").first?.modifiers == ["private"])
   }
 
+  @Test func inheritsThroughConformanceAttributes() throws {
+    let source = file(
+      """
+      final class Cache: @unchecked Sendable {}
+      extension URL: @retroactive Identifiable {}
+      struct Delegate: @preconcurrency Observer<Event> {}
+      struct Unchecker: UncheckedSendable {}
+      """)
+    let declarations = source.declarations
+    #expect(declarations[0].inheritance == ["@unchecked Sendable"])
+    #expect(declarations[0].inherits(from: "Sendable"))
+    #expect(declarations[1].inherits(from: "Identifiable"))
+    #expect(declarations[2].inherits(from: "Observer"))
+    #expect(!declarations[3].inherits(from: "Sendable"))
+  }
+
   @Test func nestsChildrenWithTheirParent() throws {
     let feature = try #require(source.declarations.first)
     #expect(feature.children.map(\.name) == ["State", "Action", "debug", "init", "Body"])
