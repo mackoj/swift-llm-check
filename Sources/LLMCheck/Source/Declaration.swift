@@ -58,9 +58,16 @@ public final class Declaration: Finding, @unchecked Sendable {
   /// Whether the declaration has `@name` (without the `@`).
   public func hasAttribute(_ name: String) -> Bool { attributes.contains(name) }
 
-  /// Whether the inheritance clause names `type`, with or without generic arguments.
+  /// Whether the inheritance clause names `type`, with or without generic arguments, and through an attribute:
+  /// `@unchecked Sendable` inherits from `Sendable`, `@retroactive Identifiable` from `Identifiable`.
   public func inherits(from type: String) -> Bool {
-    inheritance.contains { $0 == type || $0.hasPrefix(type + "<") }
+    inheritance.contains { written in
+      var name = Substring(written)
+      while name.hasPrefix("@"), let space = name.firstIndex(of: " ") {
+        name = name[space...].drop { $0 == " " }
+      }
+      return name == type || name.hasPrefix(type + "<")
+    }
   }
 
   /// Whether the declaration has a modifier: `public`, `static`…

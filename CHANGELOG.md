@@ -17,6 +17,12 @@ minor release may break source compatibility, and each break is listed under **B
   report `references(to:)`, `calls(named:)` and `nodes(of:)` findings together. Replaces the hand-written
   `Match(node: Syntax($0.node), file: $0.file)` in swift-arazzo's and swift-jsonpath's no-I/O rules.
 
+### Fixed
+
+- `Declaration.inherits(from:)` sees through an attribute in the inheritance clause: `@unchecked Sendable` inherits
+  from `Sendable`, `@retroactive Identifiable` from `Identifiable`. It returned false, so a rule such as "public types
+  are `Sendable`" flagged a type declared `@unchecked Sendable`. `inheritance` still lists the clause as written.
+
 ## 0.3.0 (2026-11-10)
 
 ### Added
