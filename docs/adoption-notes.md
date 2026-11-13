@@ -15,7 +15,7 @@ swift-llm-check" guide.
 | Baseline today | none | none | none | none | none |
 | Runs from | `scripts/test.sh` on any Swift change, `scripts/ci.sh` | by hand before every push (`AGENTS.md`) | CI's macOS job | CI's macOS job | CI's `architecture` job |
 | Rules document | `Packages/TelaioArchitecture/RULES.md` | `ForumOfflineReader/docs/architecture-rules.md` | `docs/architecture-rules.md` | `docs/architecture-rules.md` | `docs/architecture-rules.md` |
-| Gave back to the library | the library itself (ported from a Harmonize pilot) | `isAwaited`, `passesClosure`, `argument(labeled:)` (#4, 0.3.0) | `imports(of:)`, `enclosingIfConfigClauses` (#6, 0.4.0) | `Match.erased` | `inherits(from:)` sees `@unchecked Sendable` |
+| Gave back to the library | the library itself (ported from a Harmonize pilot) | `isAwaited`, `passesClosure`, `argument(labeled:)` (#4, 0.3.0) | `imports(of:)`, `enclosingIfConfigClauses` (#6, 0.4.0) | `Match.erased` | `inherits(from:)` sees `@unchecked Sendable` (#10) |
 
 ## The recipe they share
 
@@ -177,7 +177,7 @@ The library checks itself, with the recipe above and one difference: the rules p
 - **Checked like swift-arazzo.** One violation per rule planted in `Sources` and `Tests`; all nine failed at the
   planted line.
 - **Gave back.** `Declaration.inherits(from: "Sendable")` was false for `@unchecked Sendable`, since `inheritance`
-  keeps the clause as written. The `Sendable` detector stripped the attribute itself; the library now sees through
+  keeps the clause as written. The `Sendable` detector stripped the attribute itself; #10 makes the library see through
   `@unchecked`, `@retroactive` and `@preconcurrency`.
 
 ## The loop between repositories and the library
