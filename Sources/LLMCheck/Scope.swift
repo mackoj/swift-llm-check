@@ -176,6 +176,23 @@ public struct Scope: Sendable {
     }
     return Array(perFile.joined())
   }
+
+  /// Every `import` in the scope, wherever it is, `#if` blocks included.
+  public var imports: [Match<ImportDeclSyntax>] {
+    containing("import").nodes(of: ImportDeclSyntax.self)
+  }
+
+  /// The imports of one of `modules`: `Foundation` matches `import Foundation` and `import struct Foundation.URL`.
+  public func imports(of modules: String...) -> [Match<ImportDeclSyntax>] { imports(of: Set(modules)) }
+
+  public func imports(of modules: Set<String>) -> [Match<ImportDeclSyntax>] {
+    containing(Array(modules)).imports.filter { modules.contains($0.node.moduleName) }
+  }
+}
+
+extension ImportDeclSyntax {
+  /// `Foundation` in `import Foundation`, `@preconcurrency import Foundation` and `import struct Foundation.URL`.
+  public var moduleName: String { path.first?.name.text ?? "" }
 }
 
 extension FunctionCallExprSyntax {
@@ -223,4 +240,22 @@ extension SyntaxProtocol {
     }
     return false
   }
+
+  /// The `#if`, `#elseif` and `#else` clauses this node is compiled under, innermost first. For the `import` in
+  /// `#if os(Linux) … #else import Foundation #endif`, one clause: the `#else`, whose ``ifCondition`` is `os(Linux)`.
+  public var enclosingIfConfigClauses: [IfConfigClauseSyntax] {
+    sequence(first: Syntax(self), next: \.parent).compactMap { $0.as(IfConfigClauseSyntax.self) }
+  }
+}
+
+extension IfConfigClauseSyntax {
+  /// The condition of the `#if` that opens this clause's block, as written: `canImport(FoundationEssentials)` for
+  /// both clauses of `#if canImport(FoundationEssentials) … #else … #endif`. Read it with ``isElse`` to tell where a
+  /// fallback is.
+  public var ifCondition: String? {
+    parent?.as(IfConfigClauseListSyntax.self)?.first?.condition?.trimmedDescription
+  }
+
+  /// Whether this is the `#else` clause.
+  public var isElse: Bool { poundKeyword.tokenKind == .poundElse }
 }
