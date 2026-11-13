@@ -1,24 +1,24 @@
 # Adoption notes
 
-How three repositories adopted swift-llm-check, what they have in common, and what a future guide should say. These are
+How four repositories adopted swift-llm-check, what they have in common, and what a future guide should say. These are
 working notes, written from the code and history of each repository on 2026-11-13. The README stays the reference;
 this file collects material for a "Adopting swift-llm-check" guide.
 
-| | [Telaio](https://github.com/mackoj/telaio) | [forum-offline](https://github.com/mackoj/forum-offline) | [swift-arazzo](https://github.com/mackoj/swift-arazzo) |
-|---|---|---|---|
-| Kind | macOS app, TCA, 992 files | iOS app, SQLiteData/GRDB | Swift library, Linux and Swift 6.0 support |
-| Package | `Packages/TelaioArchitecture` | `Architecture/` | `Architecture/` |
-| Rules | 19, in 7 categories | 4, one category (`database`) | 8, in 4 categories |
-| Rules come from | PLAN, decision records (D-…), owner issues | profiling hangs (Time Profiler, Hangs) | `CODING_STANDARDS.md`, `CONSTRAINTS.md` |
-| First run | 29 findings, all fixed or decided | 85 sync accesses and 11 loads, all fixed | 0 findings |
-| Baseline today | none | none | none |
-| Runs from | `scripts/test.sh` on any Swift change, `scripts/ci.sh` | by hand before every push (`AGENTS.md`) | CI's macOS job |
-| Rules document | `Packages/TelaioArchitecture/RULES.md` | `ForumOfflineReader/docs/architecture-rules.md` | `docs/architecture-rules.md` |
-| Gave back to the library | the library itself (ported from a Harmonize pilot) | `isAwaited`, `passesClosure`, `argument(labeled:)` (#4, 0.3.0) | `imports(of:)`, `enclosingIfConfigClauses` (#6, 0.4.0) |
+| | [Telaio](https://github.com/mackoj/telaio) | [forum-offline](https://github.com/mackoj/forum-offline) | [swift-arazzo](https://github.com/mackoj/swift-arazzo) | [swift-jsonpath](https://github.com/mackoj/swift-jsonpath) |
+|---|---|---|---|---|
+| Kind | macOS app, TCA, 992 files | iOS app, SQLiteData/GRDB | Swift library, Linux and Swift 6.0 support | Swift library, no imports at all, Linux and Swift 6.0 support |
+| Package | `Packages/TelaioArchitecture` | `Architecture/` | `Architecture/` | `Architecture/` |
+| Rules | 19, in 7 categories | 4, one category (`database`) | 8, in 4 categories | 9, in 4 categories |
+| Rules come from | PLAN, decision records (D-…), owner issues | profiling hangs (Time Profiler, Hangs) | `CODING_STANDARDS.md`, `CONSTRAINTS.md` | `CODING_STANDARDS.md`, `CONSTRAINTS.md` |
+| First run | 29 findings, all fixed or decided | 85 sync accesses and 11 loads, all fixed | 0 findings | 2 findings (coders not `Sendable`), fixed |
+| Baseline today | none | none | none | none |
+| Runs from | `scripts/test.sh` on any Swift change, `scripts/ci.sh` | by hand before every push (`AGENTS.md`) | CI's macOS job | CI's macOS job |
+| Rules document | `Packages/TelaioArchitecture/RULES.md` | `ForumOfflineReader/docs/architecture-rules.md` | `docs/architecture-rules.md` | `docs/architecture-rules.md` |
+| Gave back to the library | the library itself (ported from a Harmonize pilot) | `isAwaited`, `passesClosure`, `argument(labeled:)` (#4, 0.3.0) | `imports(of:)`, `enclosingIfConfigClauses` (#6, 0.4.0) | `Match.erased` |
 
 ## The recipe they share
 
-All three ended up with the same shape, without a template. A guide can present it as the default.
+All four ended up with the same shape, without a template. A guide can present it as the default.
 
 1. **A standalone, test-only package.** Rules never build with the product: the app's Xcode project or the library's
    manifests do not reference the package, so swift-syntax resolves there only and never holds back the product's
@@ -131,6 +131,27 @@ A library adoption, where the rules restate written standards rather than fix fo
   `imports(of:)`, `ImportDeclSyntax.moduleName`, `enclosingIfConfigClauses`, `IfConfigClauseSyntax.ifCondition` and
   `isElse` (#6). swift-arazzo#11 moved to 0.4.0 and deleted its copies, as forum-offline's #179 did.
 
+## swift-jsonpath
+
+A second library adoption, copied from swift-arazzo's shape on the first try.
+
+- **Why.** As in swift-arazzo, `CODING_STANDARDS.md` and `CONSTRAINTS.md` already listed the rules, and the dependency
+  budget ("`Sources` imports nothing") was a `grep` in the constraints table.
+- **Rules.** `platforms` (`Sources` imports nothing, not even libc), `purity` (no `print`, `readLine`, `CommandLine` or
+  randomness), `models` (public types are structs or enums, `Sendable` and `Hashable`; `@unchecked Sendable` has a
+  comment), `testing` (no `fatalError("TODO")` stubs, Swift Testing only, no `.disabled`, `withKnownIssue` names its
+  issue). Four rules are swift-arazzo's, word for word apart from the examples: `tests-use-swift-testing`,
+  `tests-are-not-disabled`, `known-issues-explain-themselves` and `unchecked-sendable-explains-itself`.
+- **First run.** Two findings: `JSONValueDecoder` and `JSONValueEncoder` were not `Sendable`. They became `Sendable`;
+  they cannot be `Hashable` (`userInfo` holds `any Sendable`), so the rule lists them by name with the reason.
+- **What the detector needed.** `OrderedDictionary<Key, Value>` declares `Hashable` and `Sendable` conditionally in
+  extensions, as a generic container must. The conformance rule looks at the type and `scope.extensions` whose name is
+  the type's qualified name; swift-arazzo's version, which reads only the type's own inheritance clause, would have
+  flagged it.
+- **Checked like swift-arazzo.** One violation per rule planted in the real `Sources` and `Tests`; all nine failed at
+  the planted line.
+- **Gave back.** `Match.erased`, for the no-I/O rule that merges `references(to:)` and `calls(named:)`.
+
 ## The loop between repositories and the library
 
 Each adoption writes a helper, and a general one moves into the library:
@@ -145,9 +166,12 @@ Still local, and worth a look for the library:
 - Telaio's `isInside(_:)` (is a node inside a declaration) and `Declaration.calls(named:)` (calls within one
   declaration, nested closures included).
 - Telaio's modifier-chain helpers (`modifierNames`, `unmodified`, `chainNames`), for SwiftUI rules.
-- Combining findings of different node types: swift-arazzo's no-I/O rule merges `references(to:)`, `calls(named:)` and
-  `nodes(of:)` results by mapping each to `Match<Syntax>`. A `Match.erased` (or `expectNone` over several arrays)
-  would remove the boilerplate, and a sort by location would order the merged findings.
+- Rules copied between repositories. swift-arazzo and swift-jsonpath carry the same four `Rule`s and detectors
+  (Swift Testing only, no `.disabled`, `withKnownIssue` names its issue, `@unchecked Sendable` has a comment), and
+  Telaio has its own `known-issues-explain-themselves`. A small set of ready-made rules, with a project-specific
+  rationale passed in, would end the copying.
+- A sort by location for merged findings. Combining findings of different node types is `Match.erased` now (from
+  swift-jsonpath's adoption); the merged array is still in the order the queries ran.
 
 ## For the future guide
 

@@ -59,6 +59,10 @@ public struct Match<Node: SyntaxProtocol>: Finding {
   public var snippet: String { file.line(location.line) }
 
   public var declarationNames: [String] { DeclarationNames.enclosing(Syntax(node)) }
+
+  /// The same match with its node as `Syntax`, so matches of different node types can be reported under one rule:
+  /// `scope.references(to: "CommandLine") + scope.calls(named: "print").map(\.erased)`.
+  public var erased: Match<Syntax> { Match<Syntax>(node: Syntax(node), file: file) }
 }
 
 enum DeclarationNames {
