@@ -13,6 +13,9 @@ minor release may break source compatibility, and each break is listed under **B
 - `enclosingIfConfigClauses` on any node lists the `#if`/`#elseif`/`#else` clauses it is compiled under, and
   `IfConfigClauseSyntax.ifCondition` and `isElse` say which branch of which `#if` a clause is. For rules such as
   "`import Foundation` only as the `#else` of `#if canImport(FoundationEssentials)`".
+- `Match.erased` turns a `Match<FunctionCallExprSyntax>` (or any node type) into a `Match<Syntax>`, so one rule can
+  report `references(to:)`, `calls(named:)` and `nodes(of:)` findings together. Replaces the hand-written
+  `Match(node: Syntax($0.node), file: $0.file)` in swift-arazzo's and swift-jsonpath's no-I/O rules.
 
 ## 0.3.0 (2026-11-10)
 

@@ -59,6 +59,21 @@ import Testing
       ])
   }
 
+  @Test func erasedMatchesOfDifferentNodeTypesReportTogether() throws {
+    let scope = Scope(files: [
+      file(
+        """
+        let arguments = CommandLine.arguments
+        print(arguments)
+        """)
+    ])
+    let calls = scope.calls(named: "print")
+    let found = scope.references(to: "CommandLine") + calls.map(\.erased)
+    #expect(found.map(\.location.line) == [1, 2])
+    #expect(found.map(\.snippet) == ["let arguments = CommandLine.arguments", "print(arguments)"])
+    #expect(try #require(found.last).node.is(FunctionCallExprSyntax.self))
+  }
+
   @Test func containingFiltersOnTheRawText() {
     let scope = Scope(files: [file("let a = 1", path: "A.swift"), file("// b\nlet b = 2", path: "B.swift")])
     #expect(scope.containing("b").relativePaths == ["B.swift"])

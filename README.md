@@ -148,6 +148,7 @@ node.enclosingIfConfigClauses                // the `#if`/`#elseif`/`#else` clau
 clause.ifCondition, clause.isElse            // `canImport(FoundationEssentials)` and true for that `#if`'s `#else`
 scope.references(to: "URLSession", "FileManager")  // code only: comments and strings never match
 statement.node.attachedComments              // the comments above a node and the one at the end of its line
+scope.references(to: "CommandLine") + calls.map(\.erased)  // matches of different node types, for one rule
 ```
 
 **SwiftSyntax is not re-exported.** `import LLMCheck` is enough for scopes, declarations, `calls(named:)`,
@@ -272,8 +273,9 @@ swift-llm-check stays small and gives you the SwiftSyntax node when you need mor
 
 ## In use
 
-[Telaio](https://github.com/mackoj/telaio), [forum-offline](https://github.com/mackoj/forum-offline) and
-[swift-arazzo](https://github.com/mackoj/swift-arazzo) run their rules on swift-llm-check.
+[Telaio](https://github.com/mackoj/telaio), [forum-offline](https://github.com/mackoj/forum-offline),
+[swift-arazzo](https://github.com/mackoj/swift-arazzo) and [swift-jsonpath](https://github.com/mackoj/swift-jsonpath)
+run their rules on swift-llm-check.
 [docs/adoption-notes.md](docs/adoption-notes.md) compares how each set it up, the recipe they share, and the helpers
 that moved from their rules into the library.
 
