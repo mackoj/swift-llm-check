@@ -93,8 +93,10 @@ extension Rule {
       "Swift Testing's parallel suites are safe").
       """,
     howToFix: """
-      Prefer a `Sendable` value type, or keep the state in `Locked`. If neither fits, put a comment on the \
-      declaration that says what guards the mutable state, as `Declaration` and `Locked` do.
+      Prefer a `Sendable` value type, or keep the state in `Locked`. If neither fits, write a `//` comment that \
+      says what guards the mutable state: above the declaration, at the end of the line that opens its body, or on \
+      the first line of the body, as `Declaration` and `Locked` do. A `///` doc comment describes the type to its \
+      users and does not count.
       """,
     badExample: "final class Cache: @unchecked Sendable {",
     goodExample: """

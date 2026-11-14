@@ -138,6 +138,16 @@ scope.nodes(of: ForceUnwrapExprSyntax.self)
 scope.nodes(of: CodeBlockItemSyntax.self) { $0.node.item.is(ExprSyntax.self) }
 ```
 
+**Unfolded expressions.** SwiftParser does not fold operators: `value as! String`, `a + b`, `x is T` and `a == b`
+arrive as a `SequenceExprSyntax` whose elements are the operands and an `UnresolvedAsExprSyntax`,
+`UnresolvedIsExprSyntax` or `BinaryOperatorExprSyntax`. `nodes(of: AsExprSyntax.self)`, `IsExprSyntax` and
+`InfixOperatorExprSyntax` find nothing in parsed code; they appear only after folding with swift-syntax's
+`SwiftOperators`. Search the unresolved node, or use a built-in detector such as `forcedCasts`, which looks for both.
+
+```swift
+scope.nodes(of: UnresolvedAsExprSyntax.self) { $0.node.questionOrExclamationMark?.tokenKind == .exclamationMark }
+```
+
 **Helpers for the common cases.**
 
 ```swift
@@ -156,6 +166,26 @@ scope.references(to: "URLSession", "FileManager")  // code only: comments and st
 statement.node.attachedComments              // the comments above a node and the one at the end of its line
 scope.references(to: "CommandLine") + calls.map(\.erased)  // matches of different node types, for one rule
 ```
+
+**Built-in detectors.** The checks every adopting repository wrote for itself. Each returns the matches; the `Rule`
+stays yours, worded with your reasons.
+
+```swift
+scope.xcTestImports                  // `import XCTest`, in `#if` too
+scope.disabledTests                  // `.disabled(…)` in a `@Test` or `@Suite` attribute
+scope.unexplainedKnownIssues         // `withKnownIssue { }` whose first argument is not a reason string
+scope.unexplainedExpectedFailures    // the same for `XCTExpectFailure`
+scope.uncommentedUncheckedSendable   // `@unchecked Sendable` with no `//` comment (doc comments do not count)
+scope.forcedTries                    // `try!`
+scope.optionalTries                  // `try?`; `optionalTries + forcedTries` for "errors are never swallowed"
+scope.forcedCasts                    // `as!`, folded or not
+scope.forceUnwraps                   // `value!`
+
+expectNone(try Codebase().testCode.unexplainedKnownIssues, rule: .knownIssuesExplainThemselves)
+```
+
+A comment justifies `@unchecked Sendable` when it is a `//` or `/* */` comment just above the declaration (no blank
+line between), at the end of the line that opens its body, or before the body's first member.
 
 **SwiftSyntax is not re-exported.** `import LLMCheck` is enough for scopes, declarations, `calls(named:)`,
 `references(to:)`, `calledName`, `receiver` and the members of the nodes they return (`call.node.arguments`). A file

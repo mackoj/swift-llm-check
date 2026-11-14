@@ -3,6 +3,7 @@ import Foundation
 
 /// A value behind a lock. `Mutex` from Synchronization needs macOS 15, so this uses `NSLock` to keep macOS 14.
 final class Locked<Value>: @unchecked Sendable {
+  // @unchecked: `value` is read and written only inside `withLock`, which holds `lock`.
   private let lock = NSLock()
   private var value: Value
 
@@ -22,6 +23,7 @@ final class Locked<Value>: @unchecked Sendable {
 /// Each `Once` has its own lock, and nothing that computes a value takes another lock, so two callers can never wait on
 /// each other: whoever holds the lock is parsing, not waiting.
 final class Once<Value: Sendable>: @unchecked Sendable {
+  // @unchecked: `value` is read and written only while `lock` is held.
   private let lock = NSLock()
   private var value: Value?
 

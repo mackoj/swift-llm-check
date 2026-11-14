@@ -121,8 +121,10 @@ import Testing
         public final class Declaration: @unchecked Sendable {
           // @unchecked: `parent` is set before any caller sees it.
         }
+        // Every access to `value` holds `lock`.
+        final class Once<Value>: @unchecked Sendable {}
         """))
-    #expect(found.count == 1, "a comment inside the body is not on the declaration")
+    #expect(found.map(\.location.line) == [2], "a doc comment describes the type; it does not prove it safe")
   }
 
   @Test func synchronizationOutsideLockedIsFound() {
