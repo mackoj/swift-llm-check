@@ -13,6 +13,10 @@ public final class SourceFile: Sendable {
   public let relativePath: String
   public let source: String
   public let syntax: SourceFileSyntax
+  /// Where the symbolic link this file was read through points, or nil for a regular file: relative to the codebase
+  /// root when the destination is inside it (`Plugins/Generator/Render.swift`), an absolute path otherwise. With it a
+  /// rule can say "these are links, never copies". Read with `symbolicLinks: follow`, the default.
+  public let symbolicLinkDestination: String?
 
   /// Where each line starts: locations and snippets read it instead of a `SourceLocationConverter`, which keeps
   /// another copy of the text, and an array of lines, which kept a third.
@@ -20,11 +24,12 @@ public final class SourceFile: Sendable {
   private let declarationsOnce = Once<[Declaration]>()
   private let nodeIndex = Locked<[ObjectIdentifier: [Syntax]]>([:])
 
-  /// Parses `source`. `relativePath` defaults to `path`.
-  public init(path: String, relativePath: String? = nil, source: String) {
+  /// Parses `source`. `relativePath` defaults to `path`; `symbolicLinkDestination` is for testing rules about links.
+  public init(path: String, relativePath: String? = nil, source: String, symbolicLinkDestination: String? = nil) {
     self.path = path
     self.relativePath = relativePath ?? path
     self.source = source
+    self.symbolicLinkDestination = symbolicLinkDestination
     let tree = Parser.parse(source: source)
     self.syntax = tree
     self.lineStarts = Self.lineStarts(of: source)
@@ -204,8 +209,19 @@ enum ParseCache {
       guard let source = text(root: root, relativePath: relativePath) else { return nil }
       parses.withLock { $0[root.path, default: 0] += 1 }
       let url = root.appendingPathComponent(relativePath)
-      return SourceFile(path: url.path, relativePath: relativePath, source: source)
+      return SourceFile(
+        path: url.path, relativePath: relativePath, source: source,
+        symbolicLinkDestination: linkDestination(of: url, root: root))
     }
+  }
+
+  /// Where `url` points when it is a symbolic link, relative to `root` when inside it; nil for a regular file.
+  private static func linkDestination(of url: URL, root: URL) -> String? {
+    guard (try? url.resourceValues(forKeys: [.isSymbolicLinkKey]).isSymbolicLink) == true else { return nil }
+    let destination = url.resolvingSymlinksInPath().standardizedFileURL.path
+    let rootPath = root.resolvingSymlinksInPath().standardizedFileURL.path
+    let prefix = rootPath.hasSuffix("/") ? rootPath : rootPath + "/"
+    return destination.hasPrefix(prefix) ? String(destination.dropFirst(prefix.count)) : destination
   }
 
   private static func once<Value>(

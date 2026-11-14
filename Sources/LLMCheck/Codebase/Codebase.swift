@@ -58,16 +58,19 @@ public struct Codebase: Sendable {
   /// Every file.
   public var allCode: Scope { Scope(codebase: self, kind: .all) }
 
-  /// The Swift files under the root, relative to it and sorted, without hidden folders, `.build` or excludes.
+  /// The Swift files under the root, relative to it and sorted, without hidden folders, `.build` or excludes, and
+  /// without symbolic links when the configuration's ``Configuration/symbolicLinks`` is `skip`.
   public var relativePaths: [String] {
-    let key = "\(root.path)|\(configuration.excludes.joined(separator: ","))"
+    let key = "\(root.path)|\(configuration.excludes.joined(separator: ","))|\(configuration.symbolicLinks)"
     let once = Codebase.listings.withLock { listings in
       if let once = listings[key] { return once }
       let once = Once<[String]>()
       listings[key] = once
       return once
     }
-    return once.value { Self.list(root: root, excludes: configuration.excludes) }
+    return once.value {
+      Self.list(root: root, excludes: configuration.excludes, symbolicLinks: configuration.symbolicLinks)
+    }
   }
 
   /// The parsed file at a path relative to the root, from the process-wide cache.
@@ -77,14 +80,14 @@ public struct Codebase: Sendable {
 
   private static let listings = Locked<[String: Once<[String]>]>([:])
 
-  private static func list(root: URL, excludes: [String]) -> [String] {
+  private static func list(root: URL, excludes: [String], symbolicLinks: Configuration.SymbolicLinks) -> [String] {
     // The enumerator does not descend into a root that is a symbolic link, so it walks the folder the link points to.
     let folder = root.resolvingSymlinksInPath().standardizedFileURL
     let rootPath = folder.path.hasSuffix("/") ? folder.path : folder.path + "/"
     guard
       let enumerator = FileManager.default.enumerator(
         at: folder,
-        includingPropertiesForKeys: [.isDirectoryKey],
+        includingPropertiesForKeys: [.isDirectoryKey, .isSymbolicLinkKey],
         options: [.skipsHiddenFiles, .skipsPackageDescendants]
       )
     else { return [] }
@@ -93,11 +96,13 @@ public struct Codebase: Sendable {
       let path = url.standardizedFileURL.path
       guard path.hasPrefix(rootPath) else { continue }
       let relative = String(path.dropFirst(rootPath.count))
-      let isDirectory = (try? url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) ?? false
+      let values = try? url.resourceValues(forKeys: [.isDirectoryKey, .isSymbolicLinkKey])
+      let isDirectory = values?.isDirectory ?? false
       if excludes.contains(where: { PathPattern.matches($0, relative) }) {
         if isDirectory { enumerator.skipDescendants() }
         continue
       }
+      if symbolicLinks == .skip && values?.isSymbolicLink == true { continue }
       if !isDirectory && url.pathExtension == "swift" { paths.append(relative) }
     }
     return paths.sorted()

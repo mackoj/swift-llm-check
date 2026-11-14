@@ -35,6 +35,14 @@ import Testing
     #expect(throws: ConfigurationError.self) { try Configuration(yaml: "- build") }
   }
 
+  @Test func readsSymbolicLinks() throws {
+    #expect(try Configuration(yaml: "excludes: [build]\nsymbolicLinks: skip").symbolicLinks == .skip)
+    #expect(try Configuration(yaml: "symbolicLinks: 'follow'\nexcludes:\n  - build").excludes == ["build"])
+    #expect(try Configuration(yaml: "excludes: [build]").symbolicLinks == .follow)
+    #expect(throws: ConfigurationError.self) { try Configuration(yaml: "symbolicLinks: sometimes") }
+    #expect(throws: ConfigurationError.self) { try Configuration(yaml: "symbolicLinks:\n  - skip") }
+  }
+
   @Test func testCodeIsAFolderEndingInTestsOrNamedFixtures() {
     let configuration = Configuration()
     #expect(configuration.isTestCode("Packages/Kit/Tests/KitTests/A.swift"))
@@ -115,6 +123,58 @@ import Testing
     let codebase = try Codebase(root: link)
     #expect(codebase.allCode.relativePaths == (try Fixture.codebase().allCode.relativePaths))
     #expect(codebase.file("Sources/App/Feature.swift")?.relativePath == "Sources/App/Feature.swift")
+  }
+
+  /// A root with `Plugins/Gen/Render.swift`, a link to it under `Tests/GenTests/Shared`, and a link outside the root.
+  func rootWithLinks() throws -> (root: URL, outside: URL) {
+    let manager = FileManager.default
+    let root = manager.temporaryDirectory.appendingPathComponent("llm-check-links-\(UUID().uuidString)")
+    let outside = manager.temporaryDirectory.appendingPathComponent("llm-check-outside-\(UUID().uuidString).swift")
+    try manager.createDirectory(at: root.appendingPathComponent("Plugins/Gen"), withIntermediateDirectories: true)
+    try manager.createDirectory(
+      at: root.appendingPathComponent("Tests/GenTests/Shared"), withIntermediateDirectories: true)
+    try "struct Render {}".write(
+      to: root.appendingPathComponent("Plugins/Gen/Render.swift"), atomically: true, encoding: .utf8)
+    try "struct Outside {}".write(to: outside, atomically: true, encoding: .utf8)
+    try manager.createSymbolicLink(
+      atPath: root.appendingPathComponent("Tests/GenTests/Shared/Render.swift").path,
+      withDestinationPath: "../../../Plugins/Gen/Render.swift")
+    try manager.createSymbolicLink(
+      at: root.appendingPathComponent("Tests/GenTests/Shared/Outside.swift"), withDestinationURL: outside)
+    return (root, outside)
+  }
+
+  @Test func followsSymbolicLinksByDefault() throws {
+    let (root, outside) = try rootWithLinks()
+    defer {
+      try? FileManager.default.removeItem(at: root)
+      try? FileManager.default.removeItem(at: outside)
+    }
+    let codebase = try Codebase(root: root)
+    #expect(
+      codebase.relativePaths == [
+        "Plugins/Gen/Render.swift", "Tests/GenTests/Shared/Outside.swift", "Tests/GenTests/Shared/Render.swift",
+      ])
+    let files = codebase.allCode.files
+    #expect(
+      files.map(\.symbolicLinkDestination) == [nil, outside.resolvingSymlinksInPath().path, "Plugins/Gen/Render.swift"])
+    #expect(files[2].source == "struct Render {}")
+  }
+
+  @Test func skipsSymbolicLinksWhenAsked() throws {
+    let (root, outside) = try rootWithLinks()
+    defer {
+      try? FileManager.default.removeItem(at: root)
+      try? FileManager.default.removeItem(at: outside)
+    }
+    let codebase = try Codebase(root: root, configuration: Configuration(symbolicLinks: .skip))
+    #expect(codebase.relativePaths == ["Plugins/Gen/Render.swift"])
+  }
+
+  @Test func inMemoryFilesCarryALinkDestination() {
+    #expect(SourceFile(path: "A.swift", source: "").symbolicLinkDestination == nil)
+    #expect(
+      SourceFile(path: "A.swift", source: "", symbolicLinkDestination: "B.swift").symbolicLinkDestination == "B.swift")
   }
 
   @Test func splitsProductionAndTestCode() throws {
