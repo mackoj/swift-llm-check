@@ -15,6 +15,16 @@ minor release may break source compatibility, and each break is listed under **B
   comments, so a doc comment no longer passes, and sees the comment at the end of the line that opens the body or
   before its first member. `forcedCasts` finds `as!` in parsed code, where SwiftParser leaves it unfolded as an
   `UnresolvedAsExprSyntax`; the README's new "Unfolded expressions" says which nodes arrive that way.
+- `Declaration.isPublic`, `attribute(_:)` and `attributes(_:)` (the `AttributeSyntax`, with its arguments, for
+  `@available(…)` rules), and `genericParameters` (`GenericParameter`: name, constraint as written, and every
+  conformance from the constraint and the `where` clause).
+- `Declaration.contains(_:)`, `calls(named:)` and `nodes(of:)` search one declaration's code, so two types in one file
+  are told apart; `contains` skips comments and string literals.
+- `SourceFile.module`: the target folder under `Sources`, `Tests` or `Plugins`, for per-module import budgets.
+- `Scope.topLevelStatements(notUnder:)`: what sits outside a whole-file `#if <condition>` with no `#else`, for rules
+  such as "every file in this target is wrapped in `#if canImport(Security)`".
+- `firstDescendant(of:)` and `descendants(of:)` on any node, and `TypeSyntax.closureType` and `hasAttribute(_:)`,
+  which see through attributes, optionals and parentheses to a closure type and its `@Sendable`.
 
 ### Changed
 

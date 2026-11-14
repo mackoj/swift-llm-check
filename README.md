@@ -130,6 +130,22 @@ let actions = reducers.flatMap(\.enums).named("Action").filter { $0.cases.contai
 expectAll(actions, rule: .actionsAreSplit) { $0.inherits(from: "ViewAction") }
 ```
 
+Declarations also answer the questions rules ask most:
+
+```swift
+declaration.isPublic                                   // `public` or `open`
+declaration.attribute("available")?.arguments          // `iOS 17, *` for `@available(iOS 17, *)`
+declaration.attributes("available")                    // every `@available` line
+declaration.genericParameters                          // name, constraint as written, constraints split
+declaration.contains(".accessibilityIdentifier(")      // in its code: comments and strings never match
+declaration.calls(named: "accessibilityIdentifier")    // calls inside this declaration only
+declaration.nodes(of: ForceUnwrapExprSyntax.self)      // any node inside it
+file.module                                            // `Kit` for `Packages/Kit/Sources/Kit/A.swift`
+```
+
+`contains`, `calls(named:)` and `nodes(of:)` on a declaration tell apart two types declared in one file, which
+`Scope.containing(_:)`, a per-file filter, cannot.
+
 **Any node, anywhere.** `nodes(of:)` searches the whole tree, including closures, `await`, `try`, `return`, `switch`
 and `#if`. It returns `Match`es with the `node`, its `file`, `location` and `snippet`.
 
@@ -164,6 +180,9 @@ node.enclosingIfConfigClauses                // the `#if`/`#elseif`/`#else` clau
 clause.ifCondition, clause.isElse            // `canImport(FoundationEssentials)` and true for that `#if`'s `#else`
 scope.references(to: "URLSession", "FileManager")  // code only: comments and strings never match
 statement.node.attachedComments              // the comments above a node and the one at the end of its line
+scope.topLevelStatements(notUnder: "canImport(Security)")  // what sits outside a whole-file `#if`
+node.firstDescendant(of: StringLiteralExprSyntax.self)  // the first node of a type under a node; `descendants(of:)`
+type.closureType, type.hasAttribute("Sendable")  // `() -> Void` in `(@Sendable () -> Void)?`, and its `@Sendable`
 scope.references(to: "CommandLine") + calls.map(\.erased)  // matches of different node types, for one rule
 ```
 
