@@ -41,9 +41,19 @@ jobs:
       - name: Rules (the library checks itself)
         run: xcrun swift test --package-path Architecture
 
+  benchmarks:
+    name: Benchmarks build
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build (runs locally; see README, "Benchmarks")
+        env:
+          BENCHMARK_DISABLE_JEMALLOC: "true"
+        run: xcrun swift build --package-path Benchmarks -c release
+
   lint:
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
       - name: swift-format
-        run: xcrun swift-format lint --strict -r Package.swift Sources Tests Architecture/Package.swift Architecture/Tests
+        run: xcrun swift-format lint --strict -r Package.swift Sources Tests Architecture/Package.swift Architecture/Tests Benchmarks/Package.swift Benchmarks/Benchmarks Benchmarks/Tools

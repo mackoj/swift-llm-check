@@ -1,3 +1,4 @@
+import Foundation
 import SwiftSyntax
 
 /// A set of files to check: part of a codebase, or files made in memory.
@@ -100,7 +101,7 @@ public struct Scope: Sendable {
   }
 
   private static func contains(_ source: String, _ texts: [[String]]) -> Bool {
-    texts.allSatisfy { group in group.contains { source.contains($0) } }
+    texts.allSatisfy { group in group.contains { TextSearch.contains(source, $0) } }
   }
 
   private func includes(_ path: String) -> Bool {
@@ -164,6 +165,9 @@ public struct Scope: Sendable {
 
   public func references(to names: Set<String>) -> [Match<Syntax>] {
     let perFile = concurrentMap(containing(Array(names)).files) { file in
+      file.indexNodes([
+        NodeQuery(DeclReferenceExprSyntax.self), NodeQuery(IdentifierTypeSyntax.self), NodeQuery(MemberTypeSyntax.self),
+      ])
       let expressions = file.nodes(of: DeclReferenceExprSyntax.self)
         .filter { names.contains($0.baseName.text) }.map(Syntax.init)
       let types = file.nodes(of: IdentifierTypeSyntax.self)
@@ -244,7 +248,7 @@ extension SyntaxProtocol {
   /// The `#if`, `#elseif` and `#else` clauses this node is compiled under, innermost first. For the `import` in
   /// `#if os(Linux) … #else import Foundation #endif`, one clause: the `#else`, whose ``ifCondition`` is `os(Linux)`.
   public var enclosingIfConfigClauses: [IfConfigClauseSyntax] {
-    sequence(first: Syntax(self), next: \.parent).compactMap { $0.as(IfConfigClauseSyntax.self) }
+    sequence(first: Syntax(self), next: { $0.parent }).compactMap { $0.as(IfConfigClauseSyntax.self) }
   }
 }
 
@@ -258,4 +262,22 @@ extension IfConfigClauseSyntax {
 
   /// Whether this is the `#else` clause.
   public var isElse: Bool { poundKeyword.tokenKind == .poundElse }
+}
+
+/// Whether a file's text contains a string, for the filters that run before parsing.
+enum TextSearch {
+  /// A byte search for an ASCII `text`, which is many times faster than `String.contains`. It can only find more files
+  /// than `String.contains` (`e` in a decomposed `é`), never fewer, so a filter that saves parsing stays safe.
+  static func contains(_ source: String, _ text: String) -> Bool {
+    guard !text.isEmpty else { return true }
+    guard text.utf8.allSatisfy({ $0 < 0x80 }) else { return source.contains(text) }
+    var source = source
+    var text = text
+    return source.withUTF8 { haystack in
+      text.withUTF8 { needle in
+        guard let start = haystack.baseAddress, let pattern = needle.baseAddress else { return false }
+        return memmem(start, haystack.count, pattern, needle.count) != nil
+      }
+    }
+  }
 }

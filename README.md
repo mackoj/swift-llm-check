@@ -228,8 +228,12 @@ file still fails.
   while that file is parsed. Swift Testing's parallel suites are safe, and a stress test hammers the cache from 64
   concurrent tasks in two parallel suites.
 - Parsing runs on every core. `calls(named:)` and `references(to:)` skip files whose raw text does not contain the
-  name, and `containing(_:)` does the same for declaration queries. Unread files are never parsed.
-- Each node-type search runs once per file and is cached. Declarations are built on every core too.
+  name, and `containing(_:)` does the same for declaration queries. Unread files are never parsed. The text search is
+  a byte search, 13 times faster than `String.contains`.
+- Each node-type search runs once per file and is cached; `references(to:)` searches its three node types in one walk.
+  Declarations are built on every core too.
+- A parsed file keeps its text, its tree and a table of line starts, nothing more: locations and snippets are read
+  from them.
 
 On [Telaio](https://github.com/mackoj/telaio), 992 files and 220,000 lines, eight rules run in 0.7 s (2.4 s wall time
 for a built `swift test`). The same rules on Harmonize took 35 s. Reading and parsing the whole tree cold takes 2.6 s
@@ -237,6 +241,40 @@ in a debug build, almost all of it in swift-syntax's parser, which is unoptimize
 `containing(_:)` keeps most files unparsed. `swift test -c release` parses the whole tree in 0.05 s and runs the eight
 rules in 0.15 s, but compiling swift-syntax optimized adds about 100 s to a clean build, so it pays only where the
 build is cached.
+
+### Benchmarks
+
+`Benchmarks/` measures the library on [ordo-one/benchmark](https://github.com/ordo-one/benchmark) (see
+[Swift.org's introduction](https://www.swift.org/blog/benchmarks/)), on swift-syntax's own `Sources`: 321 files,
+6.6 MB. It is a separate package, built against the working copy, so the library never depends on it. It needs macOS
+15 and jemalloc (`brew install jemalloc`).
+
+```sh
+swift package --package-path Benchmarks benchmark
+# Compare a change against main:
+git switch main && swift package --package-path Benchmarks --allow-writing-to-package-directory benchmark baseline update main
+git switch - && swift package --package-path Benchmarks benchmark baseline compare main
+# Profile one benchmark with Instruments' Time Profiler; the optional focus counts only the samples under a function:
+Benchmarks/scripts/profile.sh 'Declarations, swift-syntax' 25 'DeclarationBuilder.make'
+```
+
+Median wall clock on an 18-core Apple silicon Mac, release build, before and after the changes they were written for
+(2026-11-14):
+
+| Benchmark (swift-syntax `Sources`) | Before | Now | Allocations |
+|---|---|---|---|
+| Parse every file | 408 ms | 272 ms | 444 k → 316 k |
+| Declarations, first read | 114 ms | 28 ms | 1.42 M → 103 k |
+| `calls(named:)`, first read | 321 ms | 52 ms | |
+| `references(to:)`, first read | 419 ms | 100 ms | |
+| `imports(of:)`, first read | 199 ms | 36 ms | |
+| `containing(_:)` | 258 ms | 13 ms | |
+| Attached comments of every function | 124 ms | 34 ms | 1.48 M → 162 k |
+| Five rules on a cold codebase | listed no files (symbolic-link root) | 160 ms | |
+
+Parsing peaks at 228 MB instead of 254 MB. A first `nodes(of:)` search on a file costs a little more than before
+(76 ms against 63 ms here): swift-syntax builds a tree's node data on its first walk, which used to happen while
+parsing. Parsing and a first search together take 348 ms instead of 470 ms.
 
 ## swift-syntax versions
 
@@ -284,7 +322,9 @@ that moved from their rules into the library.
 ```sh
 xcrun swift test
 xcrun swift test --package-path Architecture
-xcrun swift-format lint --strict -r Package.swift Sources Tests Architecture/Package.swift Architecture/Tests
+xcrun swift-format lint --strict -r Package.swift Sources Tests Architecture/Package.swift Architecture/Tests \
+  Benchmarks/Package.swift Benchmarks/Benchmarks Benchmarks/Tools
+swift package --package-path Benchmarks benchmark   # see "Benchmarks"
 ```
 
 The library checks itself. `Architecture/` holds swift-llm-check's own rules, written with the working copy of the

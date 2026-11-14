@@ -14,8 +14,9 @@ public final class SourceFile: Sendable {
   public let source: String
   public let syntax: SourceFileSyntax
 
-  let converter: SourceLocationConverter
-  private let lines: [String]
+  /// Where each line starts: locations and snippets read it instead of a `SourceLocationConverter`, which keeps
+  /// another copy of the text, and an array of lines, which kept a third.
+  private let lineStarts: [Int]
   private let declarationsOnce = Once<[Declaration]>()
   private let nodeIndex = Locked<[ObjectIdentifier: [Syntax]]>([:])
 
@@ -26,9 +27,7 @@ public final class SourceFile: Sendable {
     self.source = source
     let tree = Parser.parse(source: source)
     self.syntax = tree
-    self.converter = SourceLocationConverter(fileName: path, tree: tree)
-    // `\r\n` is one Character, so splitting on "\n" alone would leave a CRLF file as one line.
-    self.lines = source.split(omittingEmptySubsequences: false, whereSeparator: \.isLineBreak).map(String.init)
+    self.lineStarts = Self.lineStarts(of: source)
   }
 
   /// `Sidebar.swift` in `Sources/Sidebar/Sidebar.swift`.
@@ -45,12 +44,21 @@ public final class SourceFile: Sendable {
   /// Every node of a type, anywhere in the file, in source order: inside closures, `await`, `try`, `return`, `switch`
   /// and `#if`. The search runs once per file and node type.
   public func nodes<Node: SyntaxProtocol>(of type: Node.Type) -> [Node] {
-    let key = ObjectIdentifier(type)
-    if let found = nodeIndex.withLock({ $0[key] }) { return found.map { $0.cast(Node.self) } }
-    let collector = NodeCollector<Node>()
+    indexNodes([NodeQuery(Node.self)])
+    let found = nodeIndex.withLock { $0[ObjectIdentifier(Node.self)] } ?? []
+    return found.map { $0.cast(Node.self) }
+  }
+
+  /// Searches the file once for every type in `queries` not searched yet, so a query that needs several node types,
+  /// like `references(to:)`, walks the tree once.
+  func indexNodes(_ queries: [NodeQuery]) {
+    let missing = nodeIndex.withLock { index in queries.filter { index[$0.id] == nil } }
+    guard !missing.isEmpty else { return }
+    let collector = NodeCollector(missing)
     collector.walk(syntax)
-    nodeIndex.withLock { $0[key] = collector.found }
-    return collector.found.map { $0.cast(Node.self) }
+    nodeIndex.withLock { index in
+      for (query, found) in zip(missing, collector.found) { index[query.id] = found }
+    }
   }
 
   /// Where a node starts, after its leading trivia.
@@ -58,15 +66,58 @@ public final class SourceFile: Sendable {
     location(at: node.positionAfterSkippingLeadingTrivia)
   }
 
+  /// The line and column of a position, both from 1, the column in UTF-8 bytes: what `SourceLocationConverter` gives
+  /// as the physical location.
   func location(at position: AbsolutePosition) -> Location {
-    let location = converter.location(for: position)
-    return Location(filePath: path, relativePath: relativePath, line: location.line, column: location.column)
+    let offset = position.utf8Offset
+    // The last line that starts at or before `offset`.
+    var low = 0
+    var high = lineStarts.count
+    while high - low > 1 {
+      let middle = (low + high) / 2
+      if lineStarts[middle] <= offset { low = middle } else { high = middle }
+    }
+    return Location(filePath: path, relativePath: relativePath, line: low + 1, column: offset - lineStarts[low] + 1)
+  }
+
+  /// A node's text as written, without its leading and trailing trivia: `trimmedDescription`, read from ``source``.
+  /// `trimmedDescription` builds a trimmed copy of the node first, which cost more than half of building
+  /// declarations. `node` must come from this file's tree.
+  func text(of node: some SyntaxProtocol) -> String {
+    let utf8 = source.utf8
+    let start = utf8.index(utf8.startIndex, offsetBy: node.positionAfterSkippingLeadingTrivia.utf8Offset)
+    let end = utf8.index(utf8.startIndex, offsetBy: node.endPositionBeforeTrailingTrivia.utf8Offset)
+    return String(source[start..<end])
   }
 
   /// The trimmed text of a 1-based line.
   public func line(_ number: Int) -> String {
-    guard number >= 1, number <= lines.count else { return "" }
-    return lines[number - 1].trimmingCharacters(in: .whitespaces)
+    guard number >= 1, number <= lineStarts.count else { return "" }
+    let utf8 = source.utf8
+    let start = utf8.index(utf8.startIndex, offsetBy: lineStarts[number - 1])
+    let end = number < lineStarts.count ? utf8.index(utf8.startIndex, offsetBy: lineStarts[number]) : utf8.endIndex
+    var text = Substring(source[start..<end])
+    while let last = text.last, last.isLineBreak { text.removeLast() }
+    return text.trimmingCharacters(in: .whitespaces)
+  }
+
+  /// The UTF-8 offset where each line starts, after `\n`, `\r` or `\r\n`: the line breaks Swift's parser counts.
+  private static func lineStarts(of source: String) -> [Int] {
+    var starts = [0]
+    var previousWasCarriageReturn = false
+    for (offset, byte) in source.utf8.enumerated() {
+      switch byte {
+      case UInt8(ascii: "\n"):
+        if previousWasCarriageReturn { starts[starts.count - 1] = offset + 1 } else { starts.append(offset + 1) }
+        previousWasCarriageReturn = false
+      case UInt8(ascii: "\r"):
+        starts.append(offset + 1)
+        previousWasCarriageReturn = true
+      default:
+        previousWasCarriageReturn = false
+      }
+    }
+    return starts
   }
 }
 
@@ -77,13 +128,49 @@ extension SourceFile: Hashable {
   public func hash(into hasher: inout Hasher) { hasher.combine(ObjectIdentifier(self)) }
 }
 
-private final class NodeCollector<Node: SyntaxProtocol>: SyntaxAnyVisitor {
-  var found: [Syntax] = []
+/// A node type to search for.
+struct NodeQuery {
+  let id: ObjectIdentifier
+  let matches: (Syntax) -> Bool
 
-  init() { super.init(viewMode: .sourceAccurate) }
+  init<Node: SyntaxProtocol>(_ type: Node.Type) {
+    id = ObjectIdentifier(type)
+    matches = { $0.is(Node.self) }
+  }
+}
+
+/// Collects the nodes of several types in one walk.
+private final class NodeCollector: SyntaxAnyVisitor {
+  let queries: [NodeQuery]
+  /// One list per query, in source order.
+  var found: [[Syntax]]
+  /// The queries a kind matches, one bit each, worked out once per kind. `node.is(Node.self)` on every node looks up
+  /// `Node`'s generic metadata behind a process-wide lock, which cost over half of a search's time and serialized
+  /// parallel searches.
+  private var matchesByKind: [SyntaxKind: UInt64] = [:]
+
+  init(_ queries: [NodeQuery]) {
+    precondition(queries.count <= 64, "at most 64 node types per walk")
+    self.queries = queries
+    found = Array(repeating: [], count: queries.count)
+    super.init(viewMode: .sourceAccurate)
+  }
 
   override func visitAny(_ node: Syntax) -> SyntaxVisitorContinueKind {
-    if node.is(Node.self) { found.append(node) }
+    let kind = node.kind
+    var matching: UInt64
+    if let known = matchesByKind[kind] {
+      matching = known
+    } else {
+      matching = 0
+      for index in queries.indices where queries[index].matches(node) { matching |= 1 << index }
+      matchesByKind[kind] = matching
+    }
+    while matching != 0 {
+      let index = matching.trailingZeroBitCount
+      found[index].append(node)
+      matching &= matching - 1
+    }
     return .visitChildren
   }
 }
