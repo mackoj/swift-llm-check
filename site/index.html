@@ -454,8 +454,8 @@ final class LoggingRules: XCTestCase {
 <section id="production">
   <div class="wrap">
     <p class="eyebrow">In production</p>
-    <h2>Five codebases. Every rule came from somewhere real.</h2>
-    <p class="lead">Two apps, two libraries and the library itself run their rules on swift-llm-check. They arrived at the same setup independently.</p>
+    <h2>Many codebases. Every rule came from somewhere real.</h2>
+    <p class="lead">Apps, libraries, SwiftPM plugins and the library itself run their rules on swift-llm-check, and the list keeps growing. Here are a few of them. They arrived at the same setup independently.</p>
     <div class="cases">
       <div class="case">
         <span class="kind">macOS app · TCA</span>
@@ -494,6 +494,7 @@ final class LoggingRules: XCTestCase {
         <ul class="facts"><li>one test-only package</li><li>one YAML file</li></ul>
       </div>
     </div>
+    <p class="small">Also checked by swift-llm-check: <a href="https://github.com/mackoj/swift-har">swift-har</a>, <a href="https://github.com/mackoj/swift-curl">swift-curl</a>, <a href="https://github.com/mackoj/swift-keychain">swift-keychain</a>, <a href="https://github.com/mackoj/swift-snapshot">swift-snapshot</a>, <a href="https://github.com/mackoj/urkel">urkel</a>, <a href="https://github.com/mackoj/PackageGeneratorPlugin">PackageGeneratorPlugin</a>, <a href="https://github.com/mackoj/PackageGeneratorCLI">PackageGeneratorCLI</a>, <a href="https://github.com/mackoj/SchemeGeneratorPlugin">SchemeGeneratorPlugin</a>, <a href="https://github.com/mackoj/EnvironmentVariationPreview">EnvironmentVariationPreview</a> and more.</p>
     <ol class="recipe">
       <li><strong>A standalone, test-only package.</strong> The app or library never builds it, so swift-syntax never holds back the product's own macros or toolchain.</li>
       <li><strong><code>.llm-check.yaml</code> at the root,</strong> excluding the rules package and folders with no product code.</li>
@@ -504,7 +505,7 @@ final class LoggingRules: XCTestCase {
       <li><strong>Agent instructions next to the rules:</strong> run the package, a failure explains itself, fix the code, never add to a baseline.</li>
       <li><strong>Baselines only on the way in,</strong> deleted when empty.</li>
     </ol>
-    <p class="small">From the <a href="https://github.com/mackoj/swift-llm-check/blob/main/docs/adoption-notes.md">adoption notes</a>, which compare the five setups in detail.</p>
+    <p class="small">From the <a href="https://github.com/mackoj/swift-llm-check/blob/main/docs/adoption-notes.md">adoption notes</a>, which compare the setups in detail.</p>
   </div>
 </section>
 
