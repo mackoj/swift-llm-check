@@ -120,6 +120,30 @@ import Testing
     }
   }
 
+  @Test(arguments: [
+    "let a = 1\nlet b = 2\n",
+    "let a = 1\r\n  let b = \"é\"\r\nlet c = 3",
+    "let a = 1\rlet b = 2\r\r  f()",
+    "let 🙂 = \"日本\"; let x = 1\n\tg(🙂)\n",
+    "#sourceLocation(file: \"Other.swift\", line: 100)\nlet a = 1\n#sourceLocation()\nlet b = 2\n",
+    "/* a\nb */ let a = 1 // é\n\n\nlet b = 2",
+    "",
+  ])
+  func locationsAndLinesMatchTheConverter(source: String) {
+    let file = file(source)
+    let converter = SourceLocationConverter(fileName: file.path, tree: file.syntax)
+    for token in file.syntax.tokens(viewMode: .sourceAccurate) {
+      let expected = converter.location(for: token.positionAfterSkippingLeadingTrivia)
+      let location = file.location(of: token)
+      #expect(location.line == expected.line && location.column == expected.column, "\(token.text)")
+    }
+    let lines = converter.sourceLines.map { line in
+      line.trimmingCharacters(in: .newlines).trimmingCharacters(in: .whitespaces)
+    }
+    #expect((1...max(lines.count, 1)).map(file.line) == (lines.isEmpty ? [""] : lines))
+    #expect(file.line(0) == "" && file.line(lines.count + 1) == "")
+  }
+
   @Test func readsAttachedComments() throws {
     let scope = Scope(files: [
       file(

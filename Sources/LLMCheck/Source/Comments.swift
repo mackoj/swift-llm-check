@@ -14,19 +14,19 @@ extension SyntaxProtocol {
 
   /// The comments before the node, on the lines above it or before it on its line.
   public var leadingComments: [String] {
-    leadingTrivia.pieces.compactMap(\.commentText)
+    leadingTrivia.pieces.compactMap { $0.commentText }
   }
 
   /// A comment after the node on its last line. Swift puts it in the node's trailing trivia or, past the end of a
   /// statement, in the next token's leading trivia up to the line break.
   public var trailingComments: [String] {
     var pieces = Array(trailingTrivia.pieces)
-    if !pieces.contains(where: \.isNewline),
+    if !pieces.contains(where: { $0.isNewline }),
       let next = lastToken(viewMode: .sourceAccurate)?.nextToken(viewMode: .sourceAccurate)
     {
       pieces += next.leadingTrivia.pieces.prefix { !$0.isNewline }
     }
-    return pieces.compactMap(\.commentText)
+    return pieces.compactMap { $0.commentText }
   }
 }
 

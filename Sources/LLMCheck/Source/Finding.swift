@@ -58,7 +58,7 @@ public struct Match<Node: SyntaxProtocol>: Finding {
 
   public var snippet: String { file.line(location.line) }
 
-  public var declarationNames: [String] { DeclarationNames.enclosing(Syntax(node)) }
+  public var declarationNames: [String] { DeclarationNames.enclosing(Syntax(node), in: file) }
 
   /// The same match with its node as `Syntax`, so matches of different node types can be reported under one rule:
   /// `scope.references(to: "CommandLine") + scope.calls(named: "print").map(\.erased)`.
@@ -67,11 +67,11 @@ public struct Match<Node: SyntaxProtocol>: Finding {
 
 enum DeclarationNames {
   /// The qualified names of the named declarations that contain `node` (and `node` itself), innermost first.
-  static func enclosing(_ node: Syntax) -> [String] {
+  static func enclosing(_ node: Syntax, in file: SourceFile) -> [String] {
     var names: [String] = []
     var current: Syntax? = node
     while let syntax = current {
-      if let name = name(of: syntax) { names.append(name) }
+      if let name = name(of: syntax, in: file) { names.append(name) }
       current = syntax.parent
     }
     let outerFirst = Array(names.reversed())
@@ -79,19 +79,19 @@ enum DeclarationNames {
   }
 
   /// The name a declaration contributes to a qualified name, or nil for anything else.
-  static func name(of syntax: Syntax) -> String? {
+  static func name(of syntax: Syntax, in file: SourceFile) -> String? {
     switch syntax.as(SyntaxEnum.self) {
     case .structDecl(let decl): decl.name.text
     case .classDecl(let decl): decl.name.text
     case .enumDecl(let decl): decl.name.text
     case .actorDecl(let decl): decl.name.text
     case .protocolDecl(let decl): decl.name.text
-    case .extensionDecl(let decl): decl.extendedType.trimmedDescription
+    case .extensionDecl(let decl): file.text(of: decl.extendedType)
     case .functionDecl(let decl): decl.name.text
     case .initializerDecl: "init"
     case .enumCaseElement(let element): element.name.text
     case .typeAliasDecl(let decl): decl.name.text
-    case .patternBinding(let binding): binding.pattern.trimmedDescription
+    case .patternBinding(let binding): file.text(of: binding.pattern)
     default: nil
     }
   }

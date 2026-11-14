@@ -136,8 +136,9 @@ enum DeclarationBuilder {
     ) -> [Declaration] {
       [
         Declaration(
-          kind: kind, name: name, attributes: names(attributes), modifiers: modifiers.map(\.trimmedDescription),
-          inheritance: inheritance?.inheritedTypes.map { $0.type.trimmedDescription } ?? [], syntax: node,
+          kind: kind, name: name, attributes: names(attributes, in: file),
+          modifiers: modifiers.map { file.text(of: $0) },
+          inheritance: inheritance?.inheritedTypes.map { file.text(of: $0.type) } ?? [], syntax: node,
           introducer: introducer, file: file, parent: parent)
       ]
     }
@@ -165,7 +166,7 @@ enum DeclarationBuilder {
         inheritance: d.inheritanceClause)
     case .extensionDecl(let d):
       return one(
-        .extension, d.extendedType.trimmedDescription, d.extensionKeyword, attributes: d.attributes,
+        .extension, file.text(of: d.extendedType), d.extensionKeyword, attributes: d.attributes,
         modifiers: d.modifiers, inheritance: d.inheritanceClause)
     case .functionDecl(let d):
       return one(.function, d.name.text, d.funcKeyword, attributes: d.attributes, modifiers: d.modifiers)
@@ -176,16 +177,16 @@ enum DeclarationBuilder {
     case .variableDecl(let d):
       return d.bindings.map { binding in
         Declaration(
-          kind: .variable, name: binding.pattern.trimmedDescription, attributes: names(d.attributes),
-          modifiers: d.modifiers.map(\.trimmedDescription), inheritance: [], syntax: Syntax(binding),
+          kind: .variable, name: file.text(of: binding.pattern), attributes: names(d.attributes, in: file),
+          modifiers: d.modifiers.map { file.text(of: $0) }, inheritance: [], syntax: Syntax(binding),
           introducer: binding.pattern.firstToken(viewMode: .sourceAccurate) ?? d.bindingSpecifier, file: file,
           parent: parent)
       }
     case .enumCaseDecl(let d):
       return d.elements.map { element in
         Declaration(
-          kind: .enumCase, name: element.name.text, attributes: names(d.attributes),
-          modifiers: d.modifiers.map(\.trimmedDescription), inheritance: [], syntax: Syntax(element),
+          kind: .enumCase, name: element.name.text, attributes: names(d.attributes, in: file),
+          modifiers: d.modifiers.map { file.text(of: $0) }, inheritance: [], syntax: Syntax(element),
           introducer: element.name, file: file, parent: parent)
       }
     default:
@@ -193,10 +194,10 @@ enum DeclarationBuilder {
     }
   }
 
-  private static func names(_ attributes: AttributeListSyntax) -> [String] {
+  private static func names(_ attributes: AttributeListSyntax, in file: SourceFile) -> [String] {
     attributes.compactMap { element in
       guard case .attribute(let attribute) = element else { return nil }
-      let name = attribute.attributeName.trimmedDescription
+      let name = file.text(of: attribute.attributeName)
       return name.split(separator: "<").first.map(String.init) ?? name
     }
   }
