@@ -62,6 +62,22 @@ testFolders: [Fixtures]
 
 Hidden folders (`.build`, `.git`, `.swiftpm`…) are always skipped.
 
+**Symbolic links.** A link to a Swift file is read like a file, under the link's path, and its
+`file.symbolicLinkDestination` says where it points (relative to the root when inside it), so a rule can require
+links and not copies. A file linked from inside the root is then checked twice, once under each path:
+`symbolicLinks: skip` leaves links out so each file is read once. Links to folders are never followed.
+
+```yaml
+symbolicLinks: skip   # Optional. follow (the default) or skip.
+```
+
+```swift
+let shared = try Codebase().allCode.in("Tests/GeneratorTests/Shared")
+expectAll(shared.files, rule: .testsLinkThePluginFiles) {
+  $0.symbolicLinkDestination?.hasPrefix("Plugins/Generator/") == true
+}
+```
+
 ## A rule
 
 ```swift

@@ -13,6 +13,8 @@ import Foundation
 /// # A path component named one of these marks test code (default: Fixtures).
 /// testFolders:
 ///   - Fixtures
+/// # Whether a symbolic link to a Swift file is read (follow, the default) or left out (skip).
+/// symbolicLinks: skip
 /// ```
 public struct Configuration: Sendable, Hashable {
   /// The marker file that `Codebase` looks for to find the root.
@@ -24,17 +26,34 @@ public struct Configuration: Sendable, Hashable {
   public var testSuffixes: [String]
   /// A directory with one of these names holds test code.
   public var testFolders: [String]
+  /// What a codebase does with a symbolic link to a Swift file. Links to folders are never followed.
+  public var symbolicLinks: SymbolicLinks
 
-  public init(excludes: [String] = [], testSuffixes: [String] = ["Tests"], testFolders: [String] = ["Fixtures"]) {
+  /// What a codebase does with a symbolic link to a Swift file.
+  public enum SymbolicLinks: String, Sendable, Hashable, CaseIterable {
+    /// Read the link like a file, under the link's path, with ``SourceFile/symbolicLinkDestination`` set. A file
+    /// linked from inside the root is then read twice, once under each path.
+    case follow
+    /// Leave links out, so each file is read once, under its real path.
+    case skip
+  }
+
+  public init(
+    excludes: [String] = [], testSuffixes: [String] = ["Tests"], testFolders: [String] = ["Fixtures"],
+    symbolicLinks: SymbolicLinks = .follow
+  ) {
     self.excludes = excludes
     self.testSuffixes = testSuffixes
     self.testFolders = testFolders
+    self.symbolicLinks = symbolicLinks
   }
 
-  /// Reads the small YAML subset the marker file uses: top-level keys with block (`- item`) or flow (`[a, b]`) lists.
+  /// Reads the small YAML subset the marker file uses: top-level keys with block (`- item`) or flow (`[a, b]`) lists,
+  /// and `symbolicLinks: follow` or `skip`.
   public init(yaml: String) throws {
     self.init()
     var lists: [String: [String]] = [:]
+    var symbolicLinks: SymbolicLinks?
     var key: String?
     for (number, rawLine) in yaml.split(omittingEmptySubsequences: false, whereSeparator: \.isLineBreak).enumerated() {
       let line = Self.stripComment(String(rawLine))
@@ -50,6 +69,14 @@ public struct Configuration: Sendable, Hashable {
       }
       let name = String(trimmed[..<colon]).trimmingCharacters(in: .whitespaces)
       let value = trimmed[trimmed.index(after: colon)...].trimmingCharacters(in: .whitespaces)
+      if name == "symbolicLinks" {
+        guard let mode = SymbolicLinks(rawValue: Self.unquote(value)) else {
+          throw ConfigurationError(line: number + 1, message: "`symbolicLinks` must be `follow` or `skip`")
+        }
+        symbolicLinks = mode
+        key = nil
+        continue
+      }
       key = name
       lists[name] = []
       if value.hasPrefix("[") && value.hasSuffix("]") {
@@ -66,6 +93,7 @@ public struct Configuration: Sendable, Hashable {
     if let excludes = lists["excludes"] { self.excludes = excludes }
     if let testSuffixes = lists["testSuffixes"] { self.testSuffixes = testSuffixes }
     if let testFolders = lists["testFolders"] { self.testFolders = testFolders }
+    if let symbolicLinks { self.symbolicLinks = symbolicLinks }
   }
 
   /// Whether a file, given relative to the root, is test code.

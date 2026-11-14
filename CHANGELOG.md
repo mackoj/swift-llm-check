@@ -25,6 +25,10 @@ minor release may break source compatibility, and each break is listed under **B
   such as "every file in this target is wrapped in `#if canImport(Security)`".
 - `firstDescendant(of:)` and `descendants(of:)` on any node, and `TypeSyntax.closureType` and `hasAttribute(_:)`,
   which see through attributes, optionals and parentheses to a closure type and its `@Sendable`.
+- `symbolicLinks: skip` in `.llm-check.yaml` (`Configuration.symbolicLinks`) leaves symbolic links to Swift files out
+  of a codebase, so a file linked from inside the root is read once, under its real path. The default, `follow`,
+  reads links as before. `SourceFile.symbolicLinkDestination` says where a link points, for rules such as "the tests
+  link the plugin's files, never copy them".
 
 ### Changed
 
