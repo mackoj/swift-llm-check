@@ -1,0 +1,668 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>swift-llm-check · Architecture rules your agents can read</title>
+<meta name="description" content="Architecture and lint rules for Swift codebases, written as Swift Testing tests. A failing rule lands on the offending line with its title, why it exists, how to fix it and a bad and a good example, so a teammate or an AI agent can fix it without asking.">
+<meta property="og:title" content="swift-llm-check · Architecture rules your agents can read">
+<meta property="og:description" content="Write your codebase's rules as Swift tests. Each failure explains itself at the offending line: the rule, why, how to fix it, bad and good examples. Swift Testing and XCTest, one dependency (swift-syntax).">
+<meta property="og:type" content="website">
+<meta name="color-scheme" content="light dark">
+<link rel="icon" href="data:image/svg+xml,%3Csvg viewBox='0 0 32 32' xmlns='http://www.w3.org/2000/svg'%3E%3Crect width='32' height='32' rx='7' fill='%230e8a5f'/%3E%3Cpath d='M8 9h7M8 14h11M8 19h6' stroke='%23fff' stroke-width='2.4' stroke-linecap='round'/%3E%3Cpath d='M17.5 21.5l3 3 6-7' fill='none' stroke='%23fff' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+<style>
+:root {
+  --bg: #f9fbfa;
+  --surface: #ffffff;
+  --surface-2: #eef4f1;
+  --text: #121a17;
+  --muted: #546660;
+  --line: #dde7e2;
+  --accent: #0b7f57;
+  --accent-ink: #ffffff;
+  --accent-soft: #e0f3ea;
+  --code-bg: #0f1714;
+  --code-text: #e6efea;
+  --code-muted: #81958d;
+  --tok-key: #f5a8d4;
+  --tok-str: #a6e3b8;
+  --tok-type: #84cfff;
+  --tok-num: #ffd38a;
+  --bad: #c2410c;
+  --ok: #0b7f57;
+  --shadow: 0 1px 2px rgb(18 26 23 / 6%), 0 8px 24px rgb(18 26 23 / 6%);
+  --radius: 14px;
+  --max: 1120px;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0d1311;
+    --surface: #141c19;
+    --surface-2: #1b2521;
+    --text: #e9f1ed;
+    --muted: #9fb1aa;
+    --line: #26332e;
+    --accent: #3fd39a;
+    --accent-ink: #062117;
+    --accent-soft: #15362a;
+    --code-bg: #080d0b;
+    --bad: #ff8a5c;
+    --ok: #3fd39a;
+    --shadow: 0 1px 2px rgb(0 0 0 / 30%), 0 8px 24px rgb(0 0 0 / 25%);
+  }
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body {
+  margin: 0;
+  overflow-x: clip;
+  background: var(--bg);
+  color: var(--text);
+  font: 17px/1.6 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Inter, Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+a { color: var(--accent); text-decoration-thickness: 1px; text-underline-offset: 3px; }
+code, pre { font: 14px/1.55 ui-monospace, "SF Mono", Menlo, Consolas, monospace; }
+/* Grid children may shrink below their content, so code scrolls inside its box instead of widening the page. */
+.grid > *, .install > *, .features > *, .cases > *, .steps > *, .stats > *, .problems > * { min-width: 0; }
+:not(pre) > code { overflow-wrap: anywhere; background: var(--surface-2); border: 1px solid var(--line); border-radius: 6px; padding: .05em .35em; font-size: .88em; }
+.wrap { max-width: var(--max); margin: 0 auto; padding: 0 20px; }
+section { padding: 88px 0; }
+section + section { border-top: 1px solid var(--line); }
+h1, h2, h3 { line-height: 1.15; letter-spacing: -.02em; margin: 0; }
+h2 { font-size: clamp(28px, 4vw, 40px); }
+h3 { font-size: 19px; letter-spacing: -.01em; }
+.eyebrow { font-size: 13px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--accent); margin: 0 0 12px; }
+.lead { color: var(--muted); font-size: 19px; max-width: 720px; margin: 16px 0 0; }
+
+/* Navigation */
+nav { position: sticky; top: 0; z-index: 10; background: color-mix(in srgb, var(--bg) 85%, transparent); backdrop-filter: saturate(1.4) blur(12px); border-bottom: 1px solid var(--line); }
+nav .wrap { display: flex; align-items: center; gap: 24px; height: 60px; }
+.brand { display: flex; align-items: center; gap: 10px; font-weight: 700; color: var(--text); text-decoration: none; }
+.brand svg { width: 26px; height: 26px; }
+nav .links { display: flex; gap: 22px; margin-left: auto; font-size: 15px; }
+nav .links a { color: var(--muted); text-decoration: none; }
+nav .links a:hover { color: var(--text); }
+@media (max-width: 880px) { nav .links a:not(.gh) { display: none; } }
+
+/* Hero */
+.hero { position: relative; overflow: hidden; padding: 96px 0 88px; }
+.hero::before {
+  /* Ruled lines, like a checklist, fading out behind the title. */
+  content: ""; position: absolute; inset: 0; z-index: -1; opacity: .8;
+  background: repeating-linear-gradient(to bottom, transparent 0 27px, var(--line) 27px 28px);
+  mask-image: radial-gradient(ellipse 70% 60% at 75% 30%, #000 10%, transparent 75%);
+}
+.hero .grid { display: grid; grid-template-columns: .9fr 1.1fr; gap: 48px; align-items: center; }
+@media (max-width: 980px) { .hero .grid { grid-template-columns: 1fr; gap: 40px; } }
+.hero h1 { font-size: clamp(40px, 6vw, 62px); }
+.hero h1 em { font-style: normal; color: var(--accent); }
+.pills { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 22px; padding: 0; list-style: none; }
+.pills li { font-size: 13px; font-weight: 600; padding: 4px 11px; border-radius: 999px; background: var(--surface); border: 1px solid var(--line); color: var(--muted); }
+.cta { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 32px; }
+.button { display: inline-flex; align-items: center; gap: 8px; padding: 12px 20px; border-radius: 10px; font-weight: 600; font-size: 16px; text-decoration: none; border: 1px solid var(--line); color: var(--text); background: var(--surface); }
+.button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.button:hover { filter: brightness(1.05); }
+.button svg { width: 18px; height: 18px; }
+.caption { color: var(--muted); font-size: 14px; margin: 12px 4px 0; }
+
+/* Code */
+.code { background: var(--code-bg); color: var(--code-text); border-radius: var(--radius); box-shadow: var(--shadow); overflow: hidden; }
+.code .bar { display: flex; align-items: center; gap: 8px; padding: 12px 16px; border-bottom: 1px solid rgb(255 255 255 / 7%); color: var(--code-muted); font-size: 13px; }
+.code .bar i { width: 11px; height: 11px; border-radius: 50%; background: #2c3833; display: inline-block; }
+.code .bar span { margin-left: 8px; }
+.code pre { margin: 0; padding: 20px; overflow-x: auto; }
+.hero .code pre { font-size: 12.5px; }
+/* The failure is the point of the page: wrap it rather than hide its end behind a scroll. */
+code.output { white-space: pre-wrap; overflow-wrap: anywhere; }
+.tok-k { color: var(--tok-key); }
+.tok-s { color: var(--tok-str); }
+.tok-t { color: var(--tok-type); }
+.tok-n { color: var(--tok-num); }
+.tok-c { color: var(--code-muted); font-style: italic; }
+.out-loc { color: #ff9b73; }
+.out-label { color: #6ee0ad; font-weight: 700; }
+.out-bad { color: #ff9b73; font-weight: 700; }
+
+/* Why */
+.problems { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; margin-top: 44px; }
+@media (max-width: 900px) { .problems { grid-template-columns: 1fr; } }
+.problem { padding: 24px; border-radius: var(--radius); border: 1px solid var(--line); background: var(--surface); }
+.problem p { color: var(--muted); font-size: 15.5px; margin: 8px 0 0; }
+.problem .tag { font-size: 12px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--bad); }
+.problem.answer .tag { color: var(--ok); }
+.problem.answer { border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); background: color-mix(in srgb, var(--accent-soft) 45%, var(--surface)); }
+
+/* Steps */
+.steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; margin-top: 44px; counter-reset: step; }
+@media (max-width: 900px) { .steps { grid-template-columns: 1fr; } }
+.step { padding: 24px; border-radius: var(--radius); background: var(--surface); border: 1px solid var(--line); box-shadow: var(--shadow); }
+.step::before { counter-increment: step; content: counter(step); display: grid; place-items: center; width: 32px; height: 32px; border-radius: 50%; background: var(--accent); color: var(--accent-ink); font-weight: 700; margin-bottom: 14px; }
+.step p { color: var(--muted); font-size: 15.5px; margin: 8px 0 0; }
+.note { color: var(--muted); font-size: 15.5px; margin-top: 22px; max-width: 820px; }
+
+/* Features */
+.features { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; margin-top: 44px; }
+@media (max-width: 960px) { .features { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 640px) { .features { grid-template-columns: 1fr; } }
+.feature { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 24px; }
+.feature .icon { width: 40px; height: 40px; border-radius: 10px; background: var(--accent-soft); color: var(--accent); display: grid; place-items: center; margin-bottom: 14px; }
+.feature .icon svg { width: 22px; height: 22px; }
+.feature p { color: var(--muted); font-size: 15.5px; margin: 8px 0 0; }
+
+/* Tabs */
+.tabs { margin-top: 40px; }
+.tablist { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
+.tablist button { font: inherit; font-size: 15px; font-weight: 600; padding: 8px 16px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface); color: var(--muted); cursor: pointer; }
+.tablist button[aria-selected="true"] { background: var(--text); border-color: var(--text); color: var(--bg); }
+.panel p { color: var(--muted); margin: 0 0 14px; max-width: 780px; }
+.js .panel[hidden] { display: none; }
+.panel + .panel { margin-top: 28px; }
+.js .panel + .panel { margin-top: 0; }
+
+/* In production */
+.cases { display: grid; grid-template-columns: repeat(2, 1fr); gap: 18px; margin-top: 44px; }
+@media (max-width: 760px) { .cases { grid-template-columns: 1fr; } }
+.case { padding: 24px; border-radius: var(--radius); border: 1px solid var(--line); background: var(--surface); }
+.case .kind { font-size: 12px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.case h3 a { color: var(--text); text-decoration: none; }
+.case h3 a:hover { color: var(--accent); }
+.case p { color: var(--muted); font-size: 15.5px; margin: 8px 0 0; }
+.case .facts { display: flex; flex-wrap: wrap; gap: 6px; margin: 14px 0 0; padding: 0; list-style: none; }
+.case .facts li { font-size: 13px; padding: 3px 10px; border-radius: 999px; background: var(--surface-2); color: var(--muted); }
+.recipe { margin: 36px 0 0; padding-left: 22px; color: var(--muted); columns: 2; column-gap: 48px; }
+@media (max-width: 860px) { .recipe { columns: 1; } }
+.recipe li { margin: 0 0 12px; break-inside: avoid; }
+.recipe li strong { color: var(--text); }
+
+/* Numbers */
+.stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 18px; margin-top: 44px; }
+@media (max-width: 860px) { .stats { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 480px) { .stats { grid-template-columns: 1fr; } }
+.stat { padding: 22px; border-radius: var(--radius); background: var(--surface); border: 1px solid var(--line); }
+.stat b { display: block; font-size: 34px; letter-spacing: -.02em; line-height: 1.1; }
+.stat span { color: var(--muted); font-size: 14.5px; }
+table { width: 100%; border-collapse: collapse; margin-top: 36px; font-size: 15px; }
+th, td { text-align: left; vertical-align: top; padding: 11px 12px; border-bottom: 1px solid var(--line); }
+th { color: var(--muted); font-weight: 600; font-size: 13px; text-transform: uppercase; letter-spacing: .06em; }
+td:first-child { font-weight: 600; }
+td.good { color: var(--ok); font-weight: 600; }
+.table-scroll { overflow-x: auto; }
+.small { color: var(--muted); font-size: 14px; margin-top: 12px; }
+
+/* Install */
+.install { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; align-items: start; margin-top: 40px; }
+@media (max-width: 900px) { .install { grid-template-columns: 1fr; } }
+.install ol { padding-left: 20px; color: var(--muted); margin: 0; }
+.install li { margin: 0 0 14px; }
+.install li strong { color: var(--text); }
+.install .code + .code { margin-top: 14px; }
+.copy { margin-left: auto; font: inherit; font-size: 12.5px; color: var(--code-muted); background: transparent; border: 1px solid rgb(255 255 255 / 12%); border-radius: 6px; padding: 3px 9px; cursor: pointer; }
+.copy:hover { color: var(--code-text); }
+
+footer { padding: 40px 0 56px; border-top: 1px solid var(--line); color: var(--muted); font-size: 14.5px; }
+footer .wrap { display: flex; flex-wrap: wrap; gap: 12px 28px; align-items: center; }
+footer a { color: var(--muted); }
+</style>
+</head>
+<body>
+
+<nav aria-label="Main">
+  <div class="wrap">
+    <a class="brand" href="#top">
+      <svg viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="7" fill="#0e8a5f"/><path d="M8 9h7M8 14h11M8 19h6" stroke="#fff" stroke-width="2.4" stroke-linecap="round"/><path d="M17.5 21.5l3 3 6-7" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      swift-llm-check
+    </a>
+    <div class="links">
+      <a href="#why">Why</a>
+      <a href="#how">How it works</a>
+      <a href="#features">Features</a>
+      <a href="#tour">Code tour</a>
+      <a href="#production">In production</a>
+      <a href="#install">Install</a>
+      <a class="gh" href="https://github.com/mackoj/swift-llm-check">GitHub</a>
+    </div>
+  </div>
+</nav>
+
+<main id="top">
+
+<section class="hero">
+  <div class="wrap grid">
+    <div>
+      <ul class="pills" aria-label="At a glance">
+        <li>Swift Testing</li>
+        <li>XCTest</li>
+        <li>swift-syntax</li>
+        <li>Swift 6</li>
+        <li>MIT</li>
+      </ul>
+      <h1>Architecture rules<br><em>your agents can read.</em></h1>
+      <p class="lead">Write your codebase's rules as Swift tests. When one breaks, the failure lands on the offending line with the rule's title, why it exists, how to fix it, and a bad and a good example. That is everything a teammate or an AI agent needs to fix it without asking.</p>
+      <div class="cta">
+        <a class="button primary" href="#install">Get started</a>
+        <a class="button" href="https://github.com/mackoj/swift-llm-check"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg> View on GitHub</a>
+      </div>
+    </div>
+    <div>
+      <div class="code"><div class="bar"><i></i><i></i><i></i><span>swift test</span></div><pre><code class="output" data-readme>Packages/TelaioCLI/Tests/TelaioCLITests/RunCommandTests.swift:100:11: await withKnownIssue {
+
+RULE: withKnownIssue says what the known issue is. [known-issues-explain-themselves, testing]
+WHY: A known issue hides a failing expectation. Without a reason in the call, the next reader cannot tell a bug
+     waiting for a fix from a test nobody understood.
+HOW TO FIX: Pass the reason as the first argument: name the bug and where it is tracked.
+BAD:
+    await withKnownIssue { try await sync.upload() }
+GOOD:
+    await withKnownIssue(&quot;sqlite-data 1.12 drops quotaExceeded (bug 1)&quot;) { try await sync.upload() }</code></pre></div>
+      <p class="caption">A real failure from Telaio's rules, recorded at the file, line and column of the violation.</p>
+    </div>
+  </div>
+</section>
+
+<section id="why">
+  <div class="wrap">
+    <p class="eyebrow">Why</p>
+    <h2>Your conventions live in documents and reviews.<br>The code is written somewhere else.</h2>
+    <p class="lead">Every codebase has rules: which layer may do I/O, how a reducer splits its actions, why a database read is never synchronous. They sit in a standards document, a decision record or a reviewer's memory. An agent writing code sees none of them at the moment it matters.</p>
+    <div class="problems">
+      <div class="problem">
+        <span class="tag">A written rule</span>
+        <h3>Nobody runs it.</h3>
+        <p>A standard that is checked by <code>grep</code> or by review fails silently. The comment a reviewer leaves is the first time the author hears of it, after the code is written.</p>
+      </div>
+      <div class="problem">
+        <span class="tag">A terse lint message</span>
+        <h3>It starts a guessing game.</h3>
+        <p><code>Violation: no_print</code> says what tripped, not why it matters or what to write instead. An agent guesses, or disables the check.</p>
+      </div>
+      <div class="problem answer">
+        <span class="tag">swift-llm-check</span>
+        <h3>The explanation travels with the failure.</h3>
+        <p>The rule, its reason, the fix and two examples are printed at the violation, in the test output an agent already reads. The same text is rendered as a document the agent reads before it starts.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="how">
+  <div class="wrap">
+    <p class="eyebrow">How it works</p>
+    <h2>A rule is a test. Its failure is the documentation.</h2>
+    <p class="lead">No new tool, no configuration language: rules are Swift, they run with <code>swift test</code> or in Xcode, and they live in a small test-only package beside your code.</p>
+    <div class="steps">
+      <div class="step">
+        <h3>Describe the rule</h3>
+        <p>A <code>Rule</code> value: an id, a title, a category, the rationale, how to fix it, and a bad and a good example. Cite where it comes from: a decision record, a measured hang, a line of your standards.</p>
+      </div>
+      <div class="step">
+        <h3>Query the code</h3>
+        <p>Scope the codebase with <code>.gitignore</code>-style patterns, then ask for declarations, calls, references, imports or any syntax node, on the real syntax tree from swift-syntax.</p>
+      </div>
+      <div class="step">
+        <h3>Assert</h3>
+        <p><code>expectNone</code> or <code>expectAll</code> records one issue per violation at its file, line and column, with the offending line and the rule's full text. In Xcode, the failure sits on the line to fix.</p>
+      </div>
+    </div>
+    <p class="note">Then render the rules with <code>RuleCatalog</code> and link the generated file from <code>AGENTS.md</code> or <code>CLAUDE.md</code>. An agent reads each rule twice: before it writes the code, and again at the line where it broke it.</p>
+  </div>
+</section>
+
+<section id="features">
+  <div class="wrap">
+    <p class="eyebrow">Features</p>
+    <h2>Small, fast, and precise where it counts.</h2>
+    <p class="lead">One package with one dependency: the queries a rule needs, the assertions that report it, and the tools to land it on a codebase that does not follow it yet.</p>
+    <div class="features">
+      <div class="feature">
+        <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 12l2 2 4-4"/><circle cx="12" cy="12" r="9"/></svg></div>
+        <h3>Swift Testing and XCTest</h3>
+        <p>Rules are <code>@Test</code> functions or <code>XCTestCase</code> methods. They run wherever your tests run: <code>swift test</code>, Xcode, CI, an agent's loop.</p>
+      </div>
+      <div class="feature">
+        <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s-7-6.2-7-11a7 7 0 0114 0c0 4.8-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/></svg></div>
+        <h3>The exact line and column</h3>
+        <p>Every finding points at the offending token, with the line it is on. Nothing is reported at line 1 of a file.</p>
+      </div>
+      <div class="feature">
+        <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6h16M4 12h10M4 18h6"/><path d="M17 15l3 3-3 3"/></svg></div>
+        <h3>The whole syntax tree</h3>
+        <p>Calls inside closures, <code>await</code>, <code>try</code>, <code>switch</code> and <code>#if</code> are found. References skip comments and strings, where a <code>grep</code> would match.</p>
+      </div>
+      <div class="feature">
+        <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 17l6-6 4 4 8-8"/><path d="M14 7h7v7"/></svg></div>
+        <h3>Baselines that only shrink</h3>
+        <p>Land a rule on code that breaks it with <code>Baseline(covering:)</code>. An entry that no longer matches fails as stale, so the list can only get shorter.</p>
+      </div>
+      <div class="feature">
+        <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/></svg></div>
+        <h3>Rules for agents, generated</h3>
+        <p><code>RuleCatalog</code> renders the rules as Markdown for <code>AGENTS.md</code> or a skill, and a test fails when that file falls behind the rules.</p>
+      </div>
+      <div class="feature">
+        <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 2L4 14h7l-1 8 9-12h-7z"/></svg></div>
+        <h3>Fast and safe in parallel</h3>
+        <p>Each file is read and parsed once per process, on every core, and only if a text filter lets it through. Everything is <code>Sendable</code>; parallel suites never deadlock.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="tour">
+  <div class="wrap">
+    <p class="eyebrow">Code tour</p>
+    <h2>Rules read like the sentence they enforce.</h2>
+    <p class="lead">Every example below is taken from the README.</p>
+    <div class="tabs">
+      <div class="tablist" role="tablist" aria-label="Examples">
+        <button role="tab" id="tab-rule" aria-controls="panel-rule" aria-selected="true">A rule</button>
+        <button role="tab" id="tab-scopes" aria-controls="panel-scopes" aria-selected="false">Scopes</button>
+        <button role="tab" id="tab-declarations" aria-controls="panel-declarations" aria-selected="false">Declarations</button>
+        <button role="tab" id="tab-queries" aria-controls="panel-queries" aria-selected="false">Calls and references</button>
+        <button role="tab" id="tab-agents" aria-controls="panel-agents" aria-selected="false">Rules for agents</button>
+        <button role="tab" id="tab-xctest" aria-controls="panel-xctest" aria-selected="false">XCTest</button>
+      </div>
+      <div class="panel" role="tabpanel" id="panel-rule" aria-labelledby="tab-rule">
+        <p>A rule is a value with everything a reader needs: a title, why it exists, how to fix it, and a bad and a good example. The test finds the violations and hands them to <code>expectNone</code>.</p>
+        <div class="code"><div class="bar"><i></i><i></i><i></i><span>LoggingRules.swift</span></div><pre><code class="swift" data-readme>import LLMCheck
+import Testing
+
+extension RuleCategory {
+  static let logging = RuleCategory(&quot;logging&quot;, description: &quot;Logging and secrets. Read before you log anything.&quot;)
+}
+
+extension Rule {
+  static let noPrint = Rule(
+    id: &quot;no-print&quot;,
+    title: &quot;The app never calls print.&quot;,
+    category: .logging,
+    rationale: &quot;print output is lost in a shipped app and cannot be private.&quot;,
+    howToFix: &quot;Use a `Logger(subsystem:category:)` and interpolate with `privacy: .private`.&quot;,
+    badExample: #&quot;print(&quot;loaded \(url)&quot;)&quot;#,
+    goodExample: #&quot;logger.debug(&quot;loaded \(url, privacy: .private)&quot;)&quot;#
+  )
+}
+
+@Suite struct LoggingRules {
+  @Test func noPrint() throws {
+    let calls = try Codebase().productionCode.in(&quot;/Sources&quot;).calls(named: &quot;print&quot;).filter { $0.node.receiver == nil }
+    expectNone(calls, rule: .noPrint)
+  }
+}</code></pre></div>
+      </div>
+      <div class="panel" role="tabpanel" id="panel-scopes" aria-labelledby="tab-scopes">
+        <p>Start from the whole codebase and narrow with patterns that read like a <code>.gitignore</code> line. <code>containing(_:)</code> filters on raw text before anything is parsed, so a rule about reducers never parses the rest of the app.</p>
+        <div class="code"><div class="bar"><i></i><i></i><i></i><span>Scopes</span></div><pre><code class="swift" data-readme>let codebase = try Codebase()            // or Codebase(root: url)
+codebase.productionCode                  // everything that is not test code
+codebase.testCode                        // under a folder ending in Tests or named Fixtures
+codebase.allCode
+  .in(&quot;Packages/Features&quot;)               // several patterns are a union, chained calls narrow
+  .excluding(&quot;DocumentFeature&quot;, &quot;*.generated.swift&quot;)
+  .containing(&quot;@Reducer&quot;)                // only files whose raw text contains this, before parsing
+Scope(files: [SourceFile(path: &quot;A.swift&quot;, source: &quot;…&quot;)])  // in-memory, to test a rule</code></pre></div>
+      </div>
+      <div class="panel" role="tabpanel" id="panel-declarations" aria-labelledby="tab-declarations">
+        <p>Structs, classes, enums, actors, protocols, extensions, functions and variables, nested ones included, with their attributes, modifiers and inheritance clause as written.</p>
+        <div class="code"><div class="bar"><i></i><i></i><i></i><span>ReducerRules.swift</span></div><pre><code class="swift" data-readme>let reducers = codebase.productionCode.containing(&quot;@Reducer&quot;).structs.withAttribute(&quot;Reducer&quot;)
+let states = reducers.flatMap(\.structs).named(&quot;State&quot;)
+expectAll(states, rule: .stateIsObservable) { $0.hasAttribute(&quot;ObservableState&quot;) }
+
+let actions = reducers.flatMap(\.enums).named(&quot;Action&quot;).filter { $0.cases.contains { $0.name == &quot;view&quot; } }
+expectAll(actions, rule: .actionsAreSplit) { $0.inherits(from: &quot;ViewAction&quot;) }</code></pre></div>
+      </div>
+      <div class="panel" role="tabpanel" id="panel-queries" aria-labelledby="tab-queries">
+        <p>Search the whole tree, closures, <code>await</code> and <code>#if</code> included. References skip comments and strings, which is what a <code>grep</code> gets wrong.</p>
+        <div class="code"><div class="bar"><i></i><i></i><i></i><span>Queries</span></div><pre><code class="swift" data-readme>scope.calls(named: &quot;withKnownIssue&quot;)         // `await withKnownIssue { }`, `return .run { await f() }`…
+scope.calls(named: names)                    // a Set&lt;String&gt; built at run time
+call.node.calledName                         // &quot;apply&quot; in `edit.apply(to: &amp;doc)`
+call.node.receiver                           // `edit`; nil for `print(x)`
+call.node.argument(labeled: &quot;database&quot;)      // `database: db` in `load(r, database: db)`
+call.node.passesClosure                      // `db.read { }`, `run(work: { })`
+call.node.isAwaited                          // `try await f()`, `(try? await f()) ?? []`; not `Task { f() }`
+scope.imports(of: &quot;Foundation&quot;, &quot;Yams&quot;)      // `import Foundation`, `import struct Foundation.URL`, in `#if` too
+scope.imports                                // every import; `import.node.moduleName` is `Foundation`
+node.enclosingIfConfigClauses                // the `#if`/`#elseif`/`#else` clauses around a node, innermost first
+clause.ifCondition, clause.isElse            // `canImport(FoundationEssentials)` and true for that `#if`'s `#else`
+scope.references(to: &quot;URLSession&quot;, &quot;FileManager&quot;)  // code only: comments and strings never match
+statement.node.attachedComments              // the comments above a node and the one at the end of its line
+scope.references(to: &quot;CommandLine&quot;) + calls.map(\.erased)  // matches of different node types, for one rule</code></pre></div>
+      </div>
+      <div class="panel" role="tabpanel" id="panel-agents" aria-labelledby="tab-agents">
+        <p>Render every rule as Markdown for <code>AGENTS.md</code>, <code>CLAUDE.md</code> or a <code>SKILL.md</code>, so an agent reads the rules before it writes the code. <code>expectFile</code> fails when the file is stale, and <code>LLM_CHECK_RECORD=1</code> rewrites it.</p>
+        <div class="code"><div class="bar"><i></i><i></i><i></i><span>CatalogTests.swift</span></div><pre><code class="swift" data-readme>@Test func rulesMarkdownIsUpToDate() throws {
+  let catalog = RuleCatalog([.noPrint, .stateIsObservable])
+  #expect(catalog.duplicateIDs.isEmpty)
+  try expectFile(&quot;docs/RULES.md&quot;, in: Codebase(), matches: catalog.markdown(title: &quot;Architecture rules&quot;))
+}</code></pre></div>
+      </div>
+      <div class="panel" role="tabpanel" id="panel-xctest" aria-labelledby="tab-xctest">
+        <p>Inside an <code>XCTestCase</code>, the same calls record XCTest failures at the violation's file and line.</p>
+        <div class="code"><div class="bar"><i></i><i></i><i></i><span>LoggingRules.swift</span></div><pre><code class="swift" data-readme>import LLMCheck
+import XCTest
+
+final class LoggingRules: XCTestCase {
+  func testNoPrint() throws {
+    let calls = try Codebase().productionCode.calls(named: &quot;print&quot;).filter { $0.node.receiver == nil }
+    expectNone(calls, rule: .noPrint)
+  }
+}</code></pre></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="production">
+  <div class="wrap">
+    <p class="eyebrow">In production</p>
+    <h2>Five codebases. Every rule came from somewhere real.</h2>
+    <p class="lead">Two apps, two libraries and the library itself run their rules on swift-llm-check. They arrived at the same setup independently.</p>
+    <div class="cases">
+      <div class="case">
+        <span class="kind">macOS app · TCA</span>
+        <h3><a href="https://github.com/mackoj/telaio">Telaio</a></h3>
+        <p>Nineteen rules from decision records and owner issues: reducer shape, layering, dependencies, logging, testing, design tokens, database access. The first run found 29 violations; all were fixed or settled by a decision, and no baseline is left.</p>
+        <ul class="facts"><li>992 files</li><li>19 rules</li><li>29 findings, all fixed</li></ul>
+      </div>
+      <div class="case">
+        <span class="kind">iOS app · SQLiteData</span>
+        <h3><a href="https://github.com/mackoj/forum-offline">forum-offline</a></h3>
+        <p>Profiling found main-thread hangs from SQLite work: a synchronous read in a view hung 1.75&nbsp;s, a write 2.7&nbsp;s. Four rules encode the fix, each rationale quoting its hang. They landed with 96 existing violations in a baseline, and the baseline was deleted once all were converted.</p>
+        <ul class="facts"><li>4 rules</li><li>96 violations converted</li><li>baseline deleted</li></ul>
+      </div>
+      <div class="case">
+        <span class="kind">Swift library · Linux</span>
+        <h3><a href="https://github.com/mackoj/swift-arazzo">swift-arazzo</a></h3>
+        <p>Its <code>CODING_STANDARDS.md</code> and <code>CONSTRAINTS.md</code> became eight rules: purity, the import budget, <code>Sendable</code> models, Swift Testing only. The library supports Linux and Swift 6.0, so the rules run in CI's macOS job only.</p>
+        <ul class="facts"><li>8 rules</li><li>0 findings</li><li>gave back import queries</li></ul>
+      </div>
+      <div class="case">
+        <span class="kind">Swift library · no imports</span>
+        <h3><a href="https://github.com/mackoj/swift-jsonpath">swift-jsonpath</a></h3>
+        <p>Copied swift-arazzo's setup on the first try. Nine rules, among them "<code>Sources</code> imports nothing". The first run found two public types that were not <code>Sendable</code>; both were fixed.</p>
+        <ul class="facts"><li>9 rules</li><li>2 findings, fixed</li><li>gave back <code>Match.erased</code></li></ul>
+      </div>
+      <div class="case">
+        <span class="kind">This library</span>
+        <h3><a href="https://github.com/mackoj/swift-llm-check/blob/main/docs/architecture-rules.md">swift-llm-check</a></h3>
+        <p>The library checks itself: nine rules that keep the README's promises, from the dependency budget to "locks only in <code>Locked.swift</code>". Built against the working copy, so a change is checked by the rules it touches.</p>
+        <ul class="facts"><li>9 rules</li><li>0 findings</li><li>runs in CI</li></ul>
+      </div>
+      <div class="case">
+        <span class="kind">Your codebase</span>
+        <h3><a href="#install">Start with one rule</a></h3>
+        <p>Pick the rule reviewers repeat most often, write it with its reason and examples, and run it. If the code already breaks it, baseline today's findings and let the list shrink.</p>
+        <ul class="facts"><li>one test-only package</li><li>one YAML file</li></ul>
+      </div>
+    </div>
+    <ol class="recipe">
+      <li><strong>A standalone, test-only package.</strong> The app or library never builds it, so swift-syntax never holds back the product's own macros or toolchain.</li>
+      <li><strong><code>.llm-check.yaml</code> at the root,</strong> excluding the rules package and folders with no product code.</li>
+      <li><strong>Rules written from rules you already have,</strong> each citing its source. A rule with no source is a rule nobody can argue with or retire.</li>
+      <li><strong>Detectors apart from the codebase,</strong> tested on in-memory snippets: what they catch, and the look-alikes they let through.</li>
+      <li><strong>A sanity count where a scope could be empty,</strong> since a rule over nothing passes.</li>
+      <li><strong>A generated rules document,</strong> linked from <code>AGENTS.md</code> or <code>CLAUDE.md</code> instead of restating the rules.</li>
+      <li><strong>Agent instructions next to the rules:</strong> run the package, a failure explains itself, fix the code, never add to a baseline.</li>
+      <li><strong>Baselines only on the way in,</strong> deleted when empty.</li>
+    </ol>
+    <p class="small">From the <a href="https://github.com/mackoj/swift-llm-check/blob/main/docs/adoption-notes.md">adoption notes</a>, which compare the five setups in detail.</p>
+  </div>
+</section>
+
+<section id="speed">
+  <div class="wrap">
+    <p class="eyebrow">Speed</p>
+    <h2>Fast enough to run on every change.</h2>
+    <p class="lead">Rules are cheap when the parser only sees the files a rule can match. Text filters run on the raw bytes first, each file is parsed at most once per process, and the work is spread over every core.</p>
+    <div class="stats">
+      <div class="stat"><b>0.7&nbsp;s</b><span>eight rules on Telaio's 992 files and 220,000 lines</span></div>
+      <div class="stat"><b>50×</b><span>faster than the same rules on Harmonize (35&nbsp;s)</span></div>
+      <div class="stat"><b>4–20×</b><span>faster queries on <code>main</code>, measured on swift-syntax's own sources</span></div>
+      <div class="stat"><b>1</b><span>dependency: swift-syntax, any version from 601 to below 700</span></div>
+    </div>
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th></th><th>Harmonize 2.0.0-beta.2</th><th>swift-llm-check</th></tr></thead>
+        <tbody>
+          <tr><td>Parallel suites</td><td>Deadlock when two suites warm the cache</td><td class="good">Safe, stress-tested</td></tr>
+          <tr><td>Calls</td><td>Whole-statement calls only</td><td class="good">The whole tree</td></tr>
+          <tr><td>Location</td><td>File-level matches report line 1</td><td class="good">Exact line and column, with the offending line</td></tr>
+          <tr><td>Swift 6</td><td>Types not <code>Sendable</code></td><td class="good">Everything <code>Sendable</code></td></tr>
+          <tr><td>Speed (Telaio, 8 rules, debug)</td><td>35&nbsp;s</td><td class="good">0.7&nbsp;s</td></tr>
+          <tr><td>Baselines</td><td>File names, fail when stale</td><td class="good">File names, paths or <code>File.swift:Decl</code>, fail when stale</td></tr>
+          <tr><td>Dependencies</td><td>swift-syntax, Yams</td><td class="good">swift-syntax</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="small"><a href="https://github.com/perrystreetsoftware/Harmonize">Harmonize</a> inspired this library: its rule text at the violation is the part that helps agents most. The full comparison and the benchmarks are in the <a href="https://github.com/mackoj/swift-llm-check#speed-and-concurrency">README</a>.</p>
+  </div>
+</section>
+
+<section id="install">
+  <div class="wrap">
+    <p class="eyebrow">Install</p>
+    <h2>Add a rules package. Write one rule.</h2>
+    <div class="install">
+      <ol>
+        <li><strong>Create a test-only package</strong> beside your code, such as <code>Packages/Architecture</code>, so your app's build never sees the rules.</li>
+        <li><strong>Put <code>.llm-check.yaml</code> at the root</strong> of the code to check. <code>Codebase()</code> walks up from the test file to find it.</li>
+        <li><strong>Write a rule</strong> from one you already enforce in review, with its reason and a bad and a good example. Run <code>swift test</code>.</li>
+        <li><strong>Tell your agents.</strong> Generate the rules document with <code>RuleCatalog</code> and link it from <code>AGENTS.md</code>: "run the rules; a failure explains itself; fix the code."</li>
+      </ol>
+      <div>
+        <div class="code"><div class="bar"><i></i><i></i><i></i><span>Package.swift</span><button class="copy" data-copy="install-package">Copy</button></div><pre><code class="swift" id="install-package" data-readme>// Packages/Architecture/Package.swift
+// swift-tools-version: 6.0
+import PackageDescription
+
+let package = Package(
+  name: &quot;Architecture&quot;,
+  platforms: [.macOS(.v14)],
+  dependencies: [.package(url: &quot;https://github.com/mackoj/swift-llm-check.git&quot;, from: &quot;0.4.1&quot;)],
+  targets: [
+    .testTarget(name: &quot;ArchitectureTests&quot;, dependencies: [.product(name: &quot;LLMCheck&quot;, package: &quot;swift-llm-check&quot;)])
+  ]
+)</code></pre></div>
+        <div class="code"><div class="bar"><i></i><i></i><i></i><span>.llm-check.yaml</span><button class="copy" data-copy="install-yaml">Copy</button></div><pre><code class="yaml" id="install-yaml" data-readme># Paths never read. A name matches any folder or file; a path with a slash matches from the root; * is a wildcard.
+excludes:
+  - build
+  - DerivedData
+  - Packages/Architecture
+# Optional. A folder whose name ends with one of these holds test code (default: Tests).
+testSuffixes: [Tests]
+# Optional. A folder with one of these names holds test code (default: Fixtures).
+testFolders: [Fixtures]</code></pre></div>
+      </div>
+    </div>
+    <p class="small">Swift 6 (Xcode 16 or later), macOS 14 or iOS 17. The <a href="https://github.com/mackoj/swift-llm-check#readme">README</a> covers scopes, queries, baselines, XCTest and the rules document in full.</p>
+  </div>
+</section>
+
+</main>
+
+<footer>
+  <div class="wrap">
+    <span>swift-llm-check · MIT licence</span>
+    <a href="https://github.com/mackoj/swift-llm-check">GitHub</a>
+    <a href="https://github.com/mackoj/swift-llm-check#readme">README</a>
+    <a href="https://github.com/mackoj/swift-llm-check/blob/main/CHANGELOG.md">Changelog</a>
+    <a href="https://github.com/mackoj/swift-llm-check/blob/main/docs/adoption-notes.md">Adoption notes</a>
+    <a href="https://mackoj.github.io/swift-jsonpath/">swift-jsonpath</a>
+    <a href="https://mackoj.github.io/swift-arazzo/">swift-arazzo</a>
+  </div>
+</footer>
+
+<script>
+// Tabs: without JavaScript every example is shown, one after another.
+document.documentElement.classList.add("js");
+const tabs = [...document.querySelectorAll('[role="tab"]')];
+function select(tab, focus) {
+  for (const t of tabs) {
+    const on = t === tab;
+    t.setAttribute("aria-selected", on);
+    t.tabIndex = on ? 0 : -1;
+    document.getElementById(t.getAttribute("aria-controls")).hidden = !on;
+  }
+  if (focus) tab.focus();
+}
+tabs.forEach((tab, i) => {
+  tab.addEventListener("click", () => select(tab));
+  tab.addEventListener("keydown", (e) => {
+    const step = e.key === "ArrowRight" ? 1 : e.key === "ArrowLeft" ? -1 : 0;
+    if (step) select(tabs[(i + step + tabs.length) % tabs.length], true);
+  });
+});
+select(tabs[0]);
+
+const escape = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+// A small Swift highlighter: comments, strings, keywords, attributes, types and numbers.
+const keywords = new Set("let var func for in where if case switch default try throws return import struct enum extension init self true false nil do catch as static final class await".split(" "));
+const token = /(\/\/[^\n]*)|(#?"(?:[^"\\\n]|\\.)*"#?)|(@[A-Za-z]+|#[a-z]+)|\b([A-Z][A-Za-z0-9]*)\b|\b([a-z]+)\b|\b(\d+(?:\.\d+)*)\b/g;
+for (const code of document.querySelectorAll("code.swift")) {
+  const text = code.textContent;
+  let html = "", last = 0;
+  for (const m of text.matchAll(token)) {
+    html += escape(text.slice(last, m.index));
+    const [all, comment, string, attribute, type, word, number] = m;
+    if (comment) html += `<span class="tok-c">${escape(all)}</span>`;
+    else if (string) html += `<span class="tok-s">${escape(all)}</span>`;
+    else if (attribute) html += `<span class="tok-k">${escape(all)}</span>`;
+    else if (type) html += `<span class="tok-t">${escape(all)}</span>`;
+    else if (word && keywords.has(word)) html += `<span class="tok-k">${escape(all)}</span>`;
+    else if (number) html += `<span class="tok-n">${escape(all)}</span>`;
+    else html += escape(all);
+    last = m.index + all.length;
+  }
+  code.innerHTML = html + escape(text.slice(last));
+}
+
+// YAML: comments and keys.
+for (const code of document.querySelectorAll("code.yaml")) {
+  code.innerHTML = code.textContent.split("\n").map((line) => {
+    if (/^\s*#/.test(line)) return `<span class="tok-c">${escape(line)}</span>`;
+    const key = line.match(/^(\s*)([A-Za-z]+)(:.*)$/);
+    return key ? `${key[1]}<span class="tok-k">${key[2]}</span>${escape(key[3])}` : escape(line);
+  }).join("\n");
+}
+
+// A rule's failure: the location, the labels, and BAD in another colour.
+for (const code of document.querySelectorAll("code.output")) {
+  code.innerHTML = code.textContent.split("\n").map((line, i) => {
+    if (i === 0) return `<span class="out-loc">${escape(line)}</span>`;
+    const label = line.match(/^(RULE|WHY|HOW TO FIX|BAD|GOOD):(.*)$/);
+    if (!label) return escape(line);
+    return `<span class="${label[1] === "BAD" ? "out-bad" : "out-label"}">${label[1]}:</span>${escape(label[2])}`;
+  }).join("\n");
+}
+
+// Copy buttons.
+for (const button of document.querySelectorAll("[data-copy]")) {
+  button.addEventListener("click", async () => {
+    const text = document.getElementById(button.dataset.copy).textContent;
+    try { await navigator.clipboard.writeText(text); button.textContent = "Copied"; }
+    catch { button.textContent = "Select and copy"; }
+    setTimeout(() => (button.textContent = "Copy"), 1600);
+  });
+}
+</script>
+</body>
+</html>
