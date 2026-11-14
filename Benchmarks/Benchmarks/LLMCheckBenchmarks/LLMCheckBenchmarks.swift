@@ -50,8 +50,10 @@ func measureOnFreshScope(_ benchmark: Benchmark, _ query: (Scope) -> some Any) {
 }
 
 let benchmarks: @Sendable () -> Void = {
+  // No peak memory by default: a scope's declarations hold their file and the file holds its declarations, so the
+  // files a benchmark parses are never freed, and the peak grows with the iteration count. Parsing measures it.
   Benchmark.defaultConfiguration = .init(
-    metrics: [.wallClock, .cpuTotal, .mallocCountTotal, .peakMemoryResident, .retainCount],
+    metrics: [.wallClock, .cpuTotal, .mallocCountTotal, .retainCount],
     timeUnits: .milliseconds,
     units: [.mallocCountTotal: .count, .retainCount: .count],
     maxDuration: .seconds(5),
@@ -63,7 +65,7 @@ let benchmarks: @Sendable () -> Void = {
 
   Benchmark(
     "Parse, swift-syntax",
-    configuration: .init(metrics: Benchmark.defaultConfiguration.metrics + [.peakMemoryResidentDelta])
+    configuration: .init(metrics: Benchmark.defaultConfiguration.metrics + [.peakMemoryResident])
   ) { _ in
     blackHole(Corpus.files.map { SourceFile(path: $0.path, source: $0.source) })
   }
