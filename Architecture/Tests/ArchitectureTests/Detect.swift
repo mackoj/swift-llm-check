@@ -51,13 +51,10 @@ enum Detect {
     }
   }
 
-  /// `@unchecked Sendable` conformances with no comment on the declaration that makes them.
+  /// `@unchecked Sendable` conformances with no `//` comment on the declaration: the built-in detector, which does
+  /// not count a doc comment.
   static func uncommentedUncheckedSendable(in scope: Scope) -> [Match<AttributeSyntax>] {
-    scope.containing("@unchecked").nodes(of: AttributeSyntax.self) { match in
-      guard match.node.attributeName.trimmedDescription == "unchecked" else { return false }
-      let declaration = sequence(first: Syntax(match.node), next: \.parent).first { $0.is(DeclSyntax.self) }
-      return declaration?.attachedComments.isEmpty ?? true
-    }
+    scope.uncommentedUncheckedSendable
   }
 
   /// Types that lock, wait or schedule work: every one of them belongs in `Support/Locked.swift`.
@@ -87,7 +84,7 @@ enum Detect {
 
   /// `import XCTest` in any other test file.
   static func xcTestImports(in scope: Scope) -> [Match<ImportDeclSyntax>] {
-    scope.excluding(xcTestFile).imports(of: "XCTest")
+    scope.excluding(xcTestFile).xcTestImports
   }
 
   /// `withKnownIssue { … }` with neither a reason (an unlabelled string first) nor a `matching:` closure.

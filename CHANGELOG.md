@@ -5,6 +5,17 @@ minor release may break source compatibility, and each break is listed under **B
 
 ## Unreleased
 
+### Added
+
+- Built-in detectors on `Scope`, the checks every adopting repository copied from swift-arazzo with their tests:
+  `xcTestImports`, `disabledTests` (`.disabled` in a `@Test` or `@Suite` attribute), `unexplainedKnownIssues`
+  (`withKnownIssue` without a reason string first), `unexplainedExpectedFailures` (the same for `XCTExpectFailure`),
+  `uncommentedUncheckedSendable`, `forcedTries`, `optionalTries`, `forcedCasts` and `forceUnwraps`. Each returns the
+  matches; the `Rule` stays the repository's own. `uncommentedUncheckedSendable` counts only `//` and `/* */`
+  comments, so a doc comment no longer passes, and sees the comment at the end of the line that opens the body or
+  before its first member. `forcedCasts` finds `as!` in parsed code, where SwiftParser leaves it unfolded as an
+  `UnresolvedAsExprSyntax`; the README's new "Unfolded expressions" says which nodes arrive that way.
+
 ### Changed
 
 - Faster, measured by the new `Benchmarks/` package on swift-syntax's own sources: parsing 1.5x, declarations 4x
