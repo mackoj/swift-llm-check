@@ -108,6 +108,15 @@ import Testing
     #expect(try Codebase(root: root).relativePaths == ["Sources/B.swift"])
   }
 
+  @Test func listsARootThatIsASymbolicLink() throws {
+    let link = FileManager.default.temporaryDirectory.appendingPathComponent("llm-check-link-\(UUID().uuidString)")
+    try FileManager.default.createSymbolicLink(at: link, withDestinationURL: Fixture.root)
+    defer { try? FileManager.default.removeItem(at: link) }
+    let codebase = try Codebase(root: link)
+    #expect(codebase.allCode.relativePaths == (try Fixture.codebase().allCode.relativePaths))
+    #expect(codebase.file("Sources/App/Feature.swift")?.relativePath == "Sources/App/Feature.swift")
+  }
+
   @Test func splitsProductionAndTestCode() throws {
     let codebase = try Fixture.codebase()
     #expect(codebase.testCode.relativePaths == ["Tests/AppTests/FeatureTests.swift", "Tests/Fixtures/Input.swift"])

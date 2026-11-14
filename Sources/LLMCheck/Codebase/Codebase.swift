@@ -78,10 +78,12 @@ public struct Codebase: Sendable {
   private static let listings = Locked<[String: Once<[String]>]>([:])
 
   private static func list(root: URL, excludes: [String]) -> [String] {
-    let rootPath = root.path.hasSuffix("/") ? root.path : root.path + "/"
+    // The enumerator does not descend into a root that is a symbolic link, so it walks the folder the link points to.
+    let folder = root.resolvingSymlinksInPath().standardizedFileURL
+    let rootPath = folder.path.hasSuffix("/") ? folder.path : folder.path + "/"
     guard
       let enumerator = FileManager.default.enumerator(
-        at: root,
+        at: folder,
         includingPropertiesForKeys: [.isDirectoryKey],
         options: [.skipsHiddenFiles, .skipsPackageDescendants]
       )
