@@ -23,3 +23,7 @@ swift-llm-check is a Swift library: architecture and lint rules for Swift codeba
 
 In the same change as any API or behaviour change: the doc comment on each public declaration you touch, every README
 section and example it affects, and a `CHANGELOG.md` entry under "Unreleased".
+
+`site/index.html` is the landing page (GitHub Pages, `.github/workflows/pages.yml`). Its code tour and install snippets
+quote the README (`data-readme` blocks, checked by `SiteTests`); its feature claims, adopters and numbers repeat the
+README and `docs/adoption-notes.md`: update them in the same change.

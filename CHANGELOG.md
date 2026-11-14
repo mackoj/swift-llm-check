@@ -5,18 +5,6 @@ minor release may break source compatibility, and each break is listed under **B
 
 ## Unreleased
 
-### Added
-
-- `Scope.imports` and `Scope.imports(of:)` find `import` declarations, inside `#if` blocks too, and
-  `ImportDeclSyntax.moduleName` reads `Foundation` from `import struct Foundation.URL`. For rules such as "the core
-  target imports only its declared dependencies".
-- `enclosingIfConfigClauses` on any node lists the `#if`/`#elseif`/`#else` clauses it is compiled under, and
-  `IfConfigClauseSyntax.ifCondition` and `isElse` say which branch of which `#if` a clause is. For rules such as
-  "`import Foundation` only as the `#else` of `#if canImport(FoundationEssentials)`".
-- `Match.erased` turns a `Match<FunctionCallExprSyntax>` (or any node type) into a `Match<Syntax>`, so one rule can
-  report `references(to:)`, `calls(named:)` and `nodes(of:)` findings together. Replaces the hand-written
-  `Match(node: Syntax($0.node), file: $0.file)` in swift-arazzo's and swift-jsonpath's no-I/O rules.
-
 ### Changed
 
 - Faster, measured by the new `Benchmarks/` package on swift-syntax's own sources: parsing 1.5x, declarations 4x
@@ -30,6 +18,25 @@ minor release may break source compatibility, and each break is listed under **B
 - `Declaration.inherits(from:)` sees through an attribute in the inheritance clause: `@unchecked Sendable` inherits
   from `Sendable`, `@retroactive Identifiable` from `Identifiable`. It returned false, so a rule such as "public types
   are `Sendable`" flagged a type declared `@unchecked Sendable`. `inheritance` still lists the clause as written.
+
+## 0.4.1 (2026-11-13)
+
+### Added
+
+- `Match.erased` turns a `Match<FunctionCallExprSyntax>` (or any node type) into a `Match<Syntax>`, so one rule can
+  report `references(to:)`, `calls(named:)` and `nodes(of:)` findings together. Replaces the hand-written
+  `Match(node: Syntax($0.node), file: $0.file)` in swift-arazzo's and swift-jsonpath's no-I/O rules.
+
+## 0.4.0 (2026-11-13)
+
+### Added
+
+- `Scope.imports` and `Scope.imports(of:)` find `import` declarations, inside `#if` blocks too, and
+  `ImportDeclSyntax.moduleName` reads `Foundation` from `import struct Foundation.URL`. For rules such as "the core
+  target imports only its declared dependencies".
+- `enclosingIfConfigClauses` on any node lists the `#if`/`#elseif`/`#else` clauses it is compiled under, and
+  `IfConfigClauseSyntax.ifCondition` and `isElse` say which branch of which `#if` a clause is. For rules such as
+  "`import Foundation` only as the `#else` of `#if canImport(FoundationEssentials)`".
 
 ## 0.3.0 (2026-11-10)
 

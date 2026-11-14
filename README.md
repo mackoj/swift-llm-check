@@ -1,5 +1,11 @@
 # swift-llm-check
 
+[![CI](https://github.com/mackoj/swift-llm-check/actions/workflows/ci.yml/badge.svg)](https://github.com/mackoj/swift-llm-check/actions/workflows/ci.yml)
+
+**[Website](https://mackoj.github.io/swift-llm-check/)** ·
+**[Rules it enforces on itself](docs/architecture-rules.md)** ·
+**[Adoption notes](docs/adoption-notes.md)**
+
 Architecture and lint rules for Swift codebases, written as Swift Testing tests. A failing rule records one issue per
 violation at the offending file, line and column, with the offending line and the rule's full text. That text is the
 title, the rationale, how to fix it and a bad and a good example, so the reader can fix the violation without asking.
@@ -33,7 +39,7 @@ import PackageDescription
 let package = Package(
   name: "Architecture",
   platforms: [.macOS(.v14)],
-  dependencies: [.package(url: "https://github.com/mackoj/swift-llm-check.git", from: "0.3.0")],
+  dependencies: [.package(url: "https://github.com/mackoj/swift-llm-check.git", from: "0.4.1")],
   targets: [
     .testTarget(name: "ArchitectureTests", dependencies: [.product(name: "LLMCheck", package: "swift-llm-check")])
   ]
@@ -158,7 +164,7 @@ that names a node type, such as `nodes(of: ForceUnwrapExprSyntax.self)` or `.is(
 
 ```swift
 dependencies: [
-  .package(url: "https://github.com/mackoj/swift-llm-check.git", from: "0.3.0"),
+  .package(url: "https://github.com/mackoj/swift-llm-check.git", from: "0.4.1"),
   .package(url: "https://github.com/swiftlang/swift-syntax.git", "601.0.0"..<"700.0.0"),
 ],
 targets: [
@@ -326,6 +332,10 @@ xcrun swift-format lint --strict -r Package.swift Sources Tests Architecture/Pac
   Benchmarks/Package.swift Benchmarks/Benchmarks Benchmarks/Tools
 swift package --package-path Benchmarks benchmark   # see "Benchmarks"
 ```
+
+`site/index.html` is the [website](https://mackoj.github.io/swift-llm-check/), published to GitHub Pages by
+`.github/workflows/pages.yml` when it changes on `main`. Its code blocks marked `data-readme` quote this README, and
+`SiteTests` fails when a README change leaves them behind.
 
 The library checks itself. `Architecture/` holds swift-llm-check's own rules, written with the working copy of the
 library: the dependency budget, no re-export, `Sendable` public types, locks only in `Support/Locked.swift`, no
