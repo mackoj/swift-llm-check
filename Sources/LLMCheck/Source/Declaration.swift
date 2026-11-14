@@ -88,6 +88,150 @@ public final class Declaration: Finding, @unchecked Sendable {
   public var cases: [Declaration] { children(.enumCase) }
 }
 
+extension Declaration {
+  /// Whether the declaration is `public` or `open`.
+  public var isPublic: Bool { hasModifier("public") || hasModifier("open") }
+
+  /// The first `@name` attribute, with its arguments: `declaration.attribute("available")?.arguments` is
+  /// `iOS 17, macOS 14, *` for `@available(iOS 17, macOS 14, *)`. `name` is written without `@` or generic arguments,
+  /// as in ``attributes``. For a variable or an enum case, the attributes of the `var` or `case` that declares it.
+  public func attribute(_ name: String) -> AttributeSyntax? { attributes(name).first }
+
+  /// Every `@name` attribute, in source order: a declaration can have several `@available` lines.
+  public func attributes(_ name: String) -> [AttributeSyntax] {
+    let list = declarationSyntax.asProtocol(WithAttributesSyntax.self)?.attributes
+    return list?.compactMap { element in
+      guard case .attribute(let attribute) = element else { return nil }
+      let written = file.text(of: attribute.attributeName)
+      return (written.split(separator: "<").first.map(String.init) ?? written) == name ? attribute : nil
+    } ?? []
+  }
+
+  /// The generic parameters of a struct, class, enum, actor, function, initializer or type alias, in order: `Model`
+  /// and `ID` in `struct Form<Model: Codable & Sendable, ID>`. Empty for other kinds.
+  public var genericParameters: [GenericParameter] {
+    guard let clause = genericParameterClause else { return [] }
+    let requirements = genericWhereClause?.requirements ?? []
+    return clause.parameters.map { parameter in
+      let name = parameter.name.text
+      let written = parameter.inheritedType.map { GenericParameter.normalized(file.text(of: $0)) }
+      var constraints = parameter.inheritedType.map(GenericParameter.composition) ?? []
+      for requirement in requirements {
+        guard case .conformanceRequirement(let conformance) = requirement.requirement,
+          conformance.leftType.trimmedDescription == name
+        else { continue }
+        constraints += GenericParameter.composition(conformance.rightType)
+      }
+      return GenericParameter(name: name, constraint: written, constraints: constraints)
+    }
+  }
+
+  /// Whether the declaration's code contains every one of `texts`. Comments and string literals are left out, so
+  /// `contains(".accessibilityIdentifier(")` is false for a body that only mentions it in a comment. Whitespace and line
+  /// breaks are kept as written.
+  public func contains(_ texts: String...) -> Bool {
+    let code = self.code
+    return texts.allSatisfy { code.contains($0) }
+  }
+
+  /// Every node of a type inside the declaration, in source order: `type.nodes(of: ForceUnwrapExprSyntax.self)`.
+  /// Like ``Scope/nodes(of:)``, but for one declaration, so two types in one file are told apart.
+  public func nodes<Node: SyntaxProtocol>(of type: Node.Type) -> [Match<Node>] {
+    let start = syntax.position
+    let end = syntax.endPosition
+    return file.nodes(of: Node.self).filter { $0.position >= start && $0.endPosition <= end }
+      .map { Match(node: $0, file: file) }
+  }
+
+  /// The calls inside the declaration whose ``SwiftSyntax/FunctionCallExprSyntax/calledName`` is one of `names`, like
+  /// ``Scope/calls(named:)-(String...)``: `component.calls(named: "accessibilityIdentifier")`.
+  public func calls(named names: String...) -> [Match<FunctionCallExprSyntax>] {
+    let names = Set(names)
+    return nodes(of: FunctionCallExprSyntax.self).filter { $0.node.calledName.map(names.contains) ?? false }
+  }
+
+  /// The whole declaration: `syntax`, or for a variable and an enum case the `var` or `case` that declares it.
+  private var declarationSyntax: Syntax {
+    switch kind {
+    case .variable, .enumCase:
+      sequence(first: syntax, next: \.parent).first { $0.is(DeclSyntax.self) } ?? syntax
+    default:
+      syntax
+    }
+  }
+
+  private var genericParameterClause: GenericParameterClauseSyntax? {
+    switch syntax.as(SyntaxEnum.self) {
+    case .structDecl(let d): d.genericParameterClause
+    case .classDecl(let d): d.genericParameterClause
+    case .enumDecl(let d): d.genericParameterClause
+    case .actorDecl(let d): d.genericParameterClause
+    case .functionDecl(let d): d.genericParameterClause
+    case .initializerDecl(let d): d.genericParameterClause
+    case .typeAliasDecl(let d): d.genericParameterClause
+    default: nil
+    }
+  }
+
+  private var genericWhereClause: GenericWhereClauseSyntax? {
+    switch syntax.as(SyntaxEnum.self) {
+    case .structDecl(let d): d.genericWhereClause
+    case .classDecl(let d): d.genericWhereClause
+    case .enumDecl(let d): d.genericWhereClause
+    case .actorDecl(let d): d.genericWhereClause
+    case .functionDecl(let d): d.genericWhereClause
+    case .initializerDecl(let d): d.genericWhereClause
+    case .typeAliasDecl(let d): d.genericWhereClause
+    default: nil
+    }
+  }
+
+  /// The declaration's text without comments and string literal contents.
+  private var code: String {
+    var text = ""
+    func append(_ trivia: Trivia) {
+      for piece in trivia.pieces {
+        if piece.commentText != nil { text += " " } else { piece.write(to: &text) }
+      }
+    }
+    for token in syntax.tokens(viewMode: .sourceAccurate) {
+      append(token.leadingTrivia)
+      if case .stringSegment = token.tokenKind {} else { text += token.text }
+      append(token.trailingTrivia)
+    }
+    return text
+  }
+}
+
+/// A generic parameter of a declaration: `Model` in `struct Form<Model: Codable & Sendable>`.
+public struct GenericParameter: Sendable, Hashable {
+  /// `Model`.
+  public let name: String
+  /// The constraint written after the colon, with each run of whitespace made one space: `Codable & Sendable`. Nil
+  /// when there is none.
+  public let constraint: String?
+  /// Every type the parameter must conform to, from the constraint and from the `where` clause, compositions split:
+  /// `["Codable", "Sendable"]` for both `<Model: Codable & Sendable>` and `<Model> where Model: Codable, Model: Sendable`.
+  public let constraints: [String]
+
+  public init(name: String, constraint: String?, constraints: [String]) {
+    self.name = name
+    self.constraint = constraint
+    self.constraints = constraints
+  }
+
+  static func normalized(_ text: String) -> String {
+    text.split(whereSeparator: \.isWhitespace).joined(separator: " ")
+  }
+
+  static func composition(_ type: TypeSyntax) -> [String] {
+    if let composition = type.as(CompositionTypeSyntax.self) {
+      return composition.elements.map { normalized($0.type.trimmedDescription) }
+    }
+    return [normalized(type.trimmedDescription)]
+  }
+}
+
 extension Array where Element == Declaration {
   public func ofKind(_ kind: Declaration.Kind) -> [Declaration] { filter { $0.kind == kind } }
   public func named(_ names: String...) -> [Declaration] { filter { names.contains($0.name) } }

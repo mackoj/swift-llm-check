@@ -36,6 +36,17 @@ public final class SourceFile: Sendable {
   /// The folders and the file name of ``relativePath``.
   public var pathComponents: [String] { relativePath.split(separator: "/").map(String.init) }
 
+  /// The Swift package target the file belongs to: the folder under the last `Sources`, `Tests` or `Plugins` folder
+  /// of ``relativePath``. `Kit` for `Packages/Kit/Sources/Kit/Cache/Cache.swift`, `AppTests` for
+  /// `Tests/AppTests/A.swift`; nil for `Sources/main.swift` or a path with none of those folders.
+  public var module: String? {
+    let folders = pathComponents.dropLast()
+    guard let index = folders.lastIndex(where: { ["Sources", "Tests", "Plugins"].contains($0) }),
+      index + 1 < folders.endIndex
+    else { return nil }
+    return folders[index + 1]
+  }
+
   /// The top-level declarations. Their ``Declaration/children`` hold the nested ones.
   public var declarations: [Declaration] {
     declarationsOnce.value { DeclarationBuilder.declarations(in: self) }

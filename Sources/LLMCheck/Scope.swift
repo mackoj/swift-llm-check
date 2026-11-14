@@ -181,6 +181,44 @@ public struct Scope: Sendable {
     return Array(perFile.joined())
   }
 
+  /// The top-level statements of each file that are not compiled only under `condition`: everything but an `#if`
+  /// with no `#elseif` or `#else` whose condition is `condition` or an `&&` of it with others. For rules such as
+  /// "every file in `Sources/KeychainLive` is wrapped in `#if canImport(Security)`": an unguarded file is reported at
+  /// each statement, a guarded one at whatever sits beside the guard. Comments are trivia, so they never match.
+  ///
+  /// ```swift
+  /// expectNone(live.topLevelStatements(notUnder: "canImport(Security)"), rule: .liveCodeIsGuarded)
+  /// ```
+  ///
+  /// `condition` is compared as written, ignoring whitespace: `targetEnvironment(simulator)`, `DEBUG`.
+  public func topLevelStatements(notUnder condition: String) -> [Match<CodeBlockItemSyntax>] {
+    let wanted = Self.withoutWhitespace(condition)
+    let perFile = concurrentMap(files) { file in
+      file.syntax.statements.filter { statement in
+        guard let ifConfig = statement.item.as(IfConfigDeclSyntax.self), ifConfig.clauses.count == 1,
+          let written = ifConfig.clauses.first?.condition
+        else { return true }
+        return !Self.conjuncts(of: written).contains { Self.withoutWhitespace($0.trimmedDescription) == wanted }
+      }
+      .map { Match(node: $0, file: file) }
+    }
+    return Array(perFile.joined())
+  }
+
+  /// `a`, `b` and `c` for `a && b && c`, which the parser leaves as an unfolded sequence; the condition itself
+  /// otherwise.
+  private static func conjuncts(of condition: ExprSyntax) -> [ExprSyntax] {
+    guard let sequence = condition.as(SequenceExprSyntax.self) else { return [condition] }
+    let elements = Array(sequence.elements)
+    let operators = elements.enumerated().filter { $0.offset % 2 == 1 }.map(\.element)
+    guard operators.allSatisfy({ $0.as(BinaryOperatorExprSyntax.self)?.operator.text == "&&" }) else {
+      return [condition]
+    }
+    return elements.enumerated().filter { $0.offset % 2 == 0 }.map(\.element)
+  }
+
+  private static func withoutWhitespace(_ text: String) -> String { text.filter { !$0.isWhitespace } }
+
   /// Every `import` in the scope, wherever it is, `#if` blocks included.
   public var imports: [Match<ImportDeclSyntax>] {
     containing("import").nodes(of: ImportDeclSyntax.self)
