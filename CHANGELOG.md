@@ -3,7 +3,7 @@
 All notable changes to swift-llm-check. The project follows [Semantic Versioning](https://semver.org); before 1.0, a
 minor release may break source compatibility, and each break is listed under **Breaking** with how to migrate.
 
-## Unreleased
+## 0.5.0 (2026-11-14)
 
 ### Added
 

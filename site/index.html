@@ -556,7 +556,7 @@ import PackageDescription
 let package = Package(
   name: &quot;Architecture&quot;,
   platforms: [.macOS(.v14)],
-  dependencies: [.package(url: &quot;https://github.com/mackoj/swift-llm-check.git&quot;, from: &quot;0.4.1&quot;)],
+  dependencies: [.package(url: &quot;https://github.com/mackoj/swift-llm-check.git&quot;, from: &quot;0.5.0&quot;)],
   targets: [
     .testTarget(name: &quot;ArchitectureTests&quot;, dependencies: [.product(name: &quot;LLMCheck&quot;, package: &quot;swift-llm-check&quot;)])
   ]
