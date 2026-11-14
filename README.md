@@ -73,9 +73,11 @@ symbolicLinks: skip   # Optional. follow (the default) or skip.
 
 ```swift
 let shared = try Codebase().allCode.in("Tests/GeneratorTests/Shared")
-expectAll(shared.files, rule: .testsLinkThePluginFiles) {
-  $0.symbolicLinkDestination?.hasPrefix("Plugins/Generator/") == true
-}
+let copies = shared.files
+  .filter { $0.symbolicLinkDestination?.hasPrefix("Plugins/Generator/") != true }
+  .map { Violation(location: .init(filePath: $0.path, relativePath: $0.relativePath, line: 1, column: 1),
+                   snippet: "\($0.relativePath) is not a link into Plugins/Generator") }
+expectNone(copies, rule: .testsLinkThePluginFiles)
 ```
 
 ## A rule
