@@ -3,6 +3,14 @@
 All notable changes to swift-llm-check. The project follows [Semantic Versioning](https://semver.org); before 1.0, a
 minor release may break source compatibility, and each break is listed under **Breaking** with how to migrate.
 
+## Unreleased
+
+### Added
+
+- `Scope.unexplainedNonExhaustiveTestStores`: `store.exhaustivity = .off` (or `.off(showSkippedAssertions:)`) with no
+  comment above it or at the end of its line, for "a non-exhaustive TestStore says why". Telaio and Tegola each wrote
+  the same detector.
+
 ## 0.5.0 (2026-11-14)
 
 ### Added

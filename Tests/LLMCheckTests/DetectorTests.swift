@@ -48,6 +48,26 @@ import Testing
     #expect(found.map(\.location.line) == [1, 2, 3, 4])
   }
 
+  @Test func findsUnexplainedNonExhaustiveTestStores() {
+    let found = scope(
+      """
+      func a() {
+        store.exhaustivity = .off
+        test.exhaustivity = .off(showSkippedAssertions: true)
+        exhaustivity = .off
+        // The effects are another suite's.
+        store.exhaustivity = .off
+        store.exhaustivity = .off  // the effects are another suite's
+        store.exhaustivity = .on
+        let exhaustivity = Exhaustivity.off
+        if store.exhaustivity == .off { }
+        let note = "store.exhaustivity = .off"
+      }
+      """
+    ).unexplainedNonExhaustiveTestStores
+    #expect(found.map(\.location.line) == [2, 3, 4])
+  }
+
   @Test func findsUnexplainedExpectedFailures() {
     let found = scope(
       """

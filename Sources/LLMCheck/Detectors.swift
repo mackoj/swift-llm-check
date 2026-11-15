@@ -32,6 +32,22 @@ extension Scope {
     calls(named: "XCTExpectFailure").filter { !Self.startsWithReason($0.node) }
   }
 
+  /// `store.exhaustivity = .off` or `.off(showSkippedAssertions:)`, as a statement, with no comment above it or at the
+  /// end of its line: for "a non-exhaustive TestStore says why". A comment on either line passes:
+  ///
+  /// ```swift
+  /// // The analytics event is the subject; the shelf's effects are ShelfFeatureTests'.
+  /// store.exhaustivity = .off
+  /// store.exhaustivity = .off(showSkippedAssertions: true)  // the effects are another suite's
+  /// ```
+  public var unexplainedNonExhaustiveTestStores: [Match<CodeBlockItemSyntax>] {
+    containing("exhaustivity").nodes(of: CodeBlockItemSyntax.self) { statement in
+      guard let assignment = statement.node.item.as(ExprSyntax.self) else { return false }
+      return assignment.trimmedDescription.firstMatch(of: /^[\w.]*exhaustivity\s*=\s*\.off\b/) != nil
+        && statement.node.attachedComments.isEmpty
+    }
+  }
+
   // MARK: Safety
 
   /// The `@unchecked` of an `@unchecked Sendable` conformance whose declaration has no comment saying why it is safe.

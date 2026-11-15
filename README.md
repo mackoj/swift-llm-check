@@ -212,6 +212,7 @@ scope.xcTestImports                  // `import XCTest`, in `#if` too
 scope.disabledTests                  // `.disabled(…)` in a `@Test` or `@Suite` attribute
 scope.unexplainedKnownIssues         // `withKnownIssue { }` whose first argument is not a reason string
 scope.unexplainedExpectedFailures    // the same for `XCTExpectFailure`
+scope.unexplainedNonExhaustiveTestStores  // `store.exhaustivity = .off` with no comment above or beside it
 scope.uncommentedUncheckedSendable   // `@unchecked Sendable` with no `//` comment (doc comments do not count)
 scope.forcedTries                    // `try!`
 scope.optionalTries                  // `try?`; `optionalTries + forcedTries` for "errors are never swallowed"
