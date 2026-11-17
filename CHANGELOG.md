@@ -18,6 +18,9 @@ minor release may break source compatibility, and each break is listed under **B
   matching. Both are opt-in choices, with synchronous setup and deliberate immediate first delivery left to the
   adopting repository's policy.
 
+- `Scope.unmaterializedEnumeratedForEach` finds direct `ForEach(items.enumerated(), …)` data arguments for code
+  targeting Apple platforms before version 26. It also recognizes parenthesized arguments and `SwiftUI.ForEach`;
+  it does not resolve types, availability guards, variables or chained transformations.
 - `Scope.unexplainedNonExhaustiveTestStores`: `store.exhaustivity = .off` (or `.off(showSkippedAssertions:)`) with no
   comment above it or at the end of its line, for "a non-exhaustive TestStore says why". Telaio and Tegola each wrote
   the same detector.

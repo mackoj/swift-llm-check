@@ -227,6 +227,7 @@ scope.swiftValuesInSQLViews          // direct Date/UUID expressions frozen into
 scope.jsonEncodedFTS5Columns         // JSON/JSONB column representations on explicit FTS5 table structs
 scope.synchronousDatabaseAccess      // unawaited inline read/write closures in GRDB/SQLiteData-importing files
 scope.immediateDatabaseObservations  // `.start`/`.publisher` with `in:` and exactly `scheduling: .immediate`
+scope.unmaterializedEnumeratedForEach  // `ForEach(items.enumerated(), ...)` without `Array`
 
 expectNone(try Codebase().testCode.unexplainedKnownIssues, rule: .knownIssuesExplainThemselves)
 ```
@@ -240,6 +241,10 @@ checks `@Observable` classes only; current TCA automatically handles its support
 database access, immediate observation delivery, migration-local temporary views and JSON documents can be valid
 choices. Their detectors describe the syntax; the adopting repository chooses its scope and policy.
 [SQLiteData constraints](docs/sqlitedata-constraints.md) gives sources, examples and the limits of each detector.
+
+`unmaterializedEnumeratedForEach` is for code targeting Apple platform versions before 26, where an
+`EnumeratedSequence` is not a `RandomAccessCollection`. Wrap the enumeration in `Array` when passing it to `ForEach`.
+The detector checks direct syntax, not types or availability guards; it does not follow variables or transformations.
 
 **SwiftSyntax is not re-exported.** `import LLMCheck` is enough for scopes, declarations, `calls(named:)`,
 `references(to:)`, `calledName`, `receiver` and the members of the nodes they return (`call.node.arguments`). A file
