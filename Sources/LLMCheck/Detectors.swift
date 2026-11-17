@@ -108,7 +108,40 @@ extension Scope {
     containing("!").nodes(of: ForceUnwrapExprSyntax.self)
   }
 
+  // MARK: SwiftUI
+
+  /// `ForEach(items.enumerated(), id: …)`, including `SwiftUI.ForEach` and parenthesized data. Before iOS 26 and
+  /// the corresponding Apple platform releases, `EnumeratedSequence` is not a `RandomAccessCollection`: use
+  /// `ForEach(Array(items.enumerated()), id: …)` instead.
+  ///
+  /// This is a syntactic check. It cannot resolve types, availability guards or shadowed names, and does not follow
+  /// variables or chained transformations. Scope it to code targeting older platforms.
+  public var unmaterializedEnumeratedForEach: [Match<FunctionCallExprSyntax>] {
+    calls(named: "ForEach").filter { match in
+      var callee = match.node.calledExpression
+      if let specialized = callee.as(GenericSpecializationExprSyntax.self) { callee = specialized.expression }
+      if let member = callee.as(MemberAccessExprSyntax.self), member.base?.trimmedDescription != "SwiftUI" {
+        return false
+      }
+      guard let first = match.node.arguments.first, first.label == nil else { return false }
+      return Self.isEnumeratedCall(first.expression)
+    }
+  }
+
   // MARK: Helpers
+
+  private static func isEnumeratedCall(_ expression: ExprSyntax) -> Bool {
+    if let tuple = expression.as(TupleExprSyntax.self), tuple.elements.count == 1, let element = tuple.elements.first,
+      element.label == nil, element.trailingComma == nil
+    {
+      return isEnumeratedCall(element.expression)
+    }
+    guard let call = expression.as(FunctionCallExprSyntax.self),
+      let member = call.calledExpression.as(MemberAccessExprSyntax.self),
+      member.base != nil, member.declName.baseName.text == "enumerated"
+    else { return false }
+    return call.arguments.isEmpty && call.trailingClosure == nil && call.additionalTrailingClosures.isEmpty
+  }
 
   /// Whether the first argument is an unlabelled string literal with some text in it.
   private static func startsWithReason(_ call: FunctionCallExprSyntax) -> Bool {

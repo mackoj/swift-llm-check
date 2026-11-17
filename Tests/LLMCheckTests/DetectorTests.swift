@@ -176,4 +176,26 @@ import Testing
     ).forceUnwraps
     #expect(found.map(\.location.line) == [1, 2])
   }
+
+  @Test func findsUnmaterializedEnumeratedForEachData() {
+    let found = scope(
+      """
+      ForEach(items.enumerated(), id: \\.offset) { _, item in Text(item) }
+      SwiftUI.ForEach(((items.enumerated())), id: \\.offset) { _, item in Text(item) }
+      ForEach((makeItems().enumerated()), id: \\.offset) { _, item in Text(item) }
+      ForEach<Data, ID, Content>(items.enumerated(), id: \\.offset) { item in Text(item) }
+      ForEach(Array(items.enumerated()), id: \\.offset) { _, item in Text(item) }
+      ForEach(items.indices, id: \\.self) { index in Text(items[index]) }
+      ForEach(items.enumerated().map(transform), id: \\.offset) { item in Text(item) }
+      ForEach(items, id: identifier(items.enumerated()))
+      ForEach(items.enumerated(argument))
+      for (index, item) in items.enumerated() {}
+      other.ForEach(items.enumerated())
+      ForEach(data: items.enumerated())
+      // ForEach(items.enumerated(), id: \\.offset)
+      let text = "ForEach(items.enumerated())"
+      """
+    ).unmaterializedEnumeratedForEach
+    #expect(found.map(\.location.line) == [1, 2, 3, 4])
+  }
 }
