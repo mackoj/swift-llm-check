@@ -8,10 +8,15 @@ minor release may break source compatibility, and each break is listed under **B
 ### Added
 
 - SQLiteData syntax detectors on `Scope`: `temporaryTriggersInMigrations`, `swiftValuesInSQLTriggers`,
-  `unignoredObservablePropertyWrappers` and `invalidFTS5SnippetTokenCounts`. They return findings for an adopter's
+  `unignoredObservablePropertyWrappers`, `invalidFTS5SnippetTokenCounts`, `temporaryViewsInMigrations`,
+  `swiftValuesInSQLViews` and `jsonEncodedFTS5Columns`. They return findings for an adopter's
   own `Rule` without linking a database library. The README and `docs/sqlitedata-constraints.md` document their
   recognized syntax, primary sources and limits. Derived from Point-Free's persistence, search and WWDC26 series
   while adopting the checks in Tegola.
+- `Scope.synchronousDatabaseAccess` and `immediateDatabaseObservations`, extracted from Telaio's database rules.
+  Import gating uses real syntax, and immediate scheduling uses exact member expressions rather than substring
+  matching. Both are opt-in choices, with synchronous setup and deliberate immediate first delivery left to the
+  adopting repository's policy.
 
 - `Scope.unexplainedNonExhaustiveTestStores`: `store.exhaustivity = .off` (or `.off(showSkippedAssertions:)`) with no
   comment above it or at the end of its line, for "a non-exhaustive TestStore says why". Telaio and Tegola each wrote

@@ -12,6 +12,17 @@ extension Scope {
     }
   }
 
+  /// Typed `createTemporaryView` calls lexically inside `registerMigration`. A temporary view needed at runtime
+  /// must be installed on every connection that queries it, because it disappears when the connection closes.
+  /// A view used only as a migration's own transformation helper can be legitimate. This detector reports the
+  /// placement; the adopting rule selects which migrations or views must remain available after launch.
+  /// Raw SQL, aliases and separately declared helpers are not followed.
+  public var temporaryViewsInMigrations: [Match<FunctionCallExprSyntax>] {
+    calls(named: "createTemporaryView").filter {
+      SQLiteSyntax.isInsideCall($0.node, named: "registerMigration")
+    }
+  }
+
   /// `Date()`, `Date.now` and `UUID()` inside typed `createTemporaryTrigger` arguments, including Foundation-qualified
   /// spellings. Those Swift values are evaluated when the SQL is built, not each time the trigger fires. Use SQL
   /// functions or a registered database function for values that must change on each invocation.
@@ -19,16 +30,55 @@ extension Scope {
   /// Explicit date/UUID initializers, dependency values, aliases, raw SQL and separately declared helpers are not
   /// analyzed. Calls nested in a function/type declaration are not treated as trigger-building expressions.
   public var swiftValuesInSQLTriggers: [Match<Syntax>] {
-    let scope = containing("createTemporaryTrigger")
+    swiftValues(inSQLBuilder: "createTemporaryTrigger")
+  }
+
+  /// `Date()`, `Date.now` and `UUID()` evaluated directly while building a typed `createTemporaryView`. Like trigger
+  /// builders, these expressions produce values at installation time, not when a later query reads the view.
+  /// Foundation-qualified spellings count. Explicit date/UUID initializers, previously built queries, custom
+  /// factories and raw SQL require review. Use SQL functions for values that should change on each query.
+  public var swiftValuesInSQLViews: [Match<Syntax>] {
+    swiftValues(inSQLBuilder: "createTemporaryView")
+  }
+
+  /// JSON/JSONB `@Column(as:)` representations directly owned by a `@Table` struct explicitly conforming to `FTS5`.
+  /// Module-qualified Table, Column and FTS5 names count. Nested non-FTS types and ordinary table columns do not.
+  ///
+  /// This is an opt-in document policy, not an invalid-SQL detector: JSON text can be indexed deliberately, and
+  /// opaque metadata can be UNINDEXED in the actual schema. Index membership is not inferred from Swift syntax.
+  /// Conformance in an extension, type aliases and custom representation types are not resolved.
+  public var jsonEncodedFTS5Columns: [Declaration] {
+    containing("FTS5").structs.filter { type in
+      type.attributes.contains { $0.split(separator: ".").last == "Table" }
+        && type.inheritance.contains { $0.split(separator: ".").last == "FTS5" }
+    }.flatMap { type in
+      type.variables.filter { variable in
+        variable.attributes.filter { $0.split(separator: ".").last == "Column" }.contains { name in
+          variable.attributes(name).contains { attribute in
+            guard case .argumentList(let arguments) = attribute.arguments,
+              let representation = arguments.first(where: { $0.label?.text == "as" })?.expression
+                .as(MemberAccessExprSyntax.self),
+              representation.declName.baseName.text == "self",
+              let member = representation.base?.as(MemberAccessExprSyntax.self)
+            else { return false }
+            return ["JSONRepresentation", "JSONBRepresentation"].contains(member.declName.baseName.text)
+          }
+        }
+      }
+    }
+  }
+
+  private func swiftValues(inSQLBuilder name: String) -> [Match<Syntax>] {
+    let scope = containing(name)
     let calls = scope.calls(named: "Date", "UUID").filter {
       $0.node.arguments.isEmpty && !$0.node.passesClosure
         && ($0.node.receiver == nil || $0.node.receiver?.trimmedDescription == "Foundation")
-        && SQLiteSyntax.isInsideCall($0.node, named: "createTemporaryTrigger")
+        && SQLiteSyntax.isInsideCall($0.node, named: name)
     }
     let members = scope.nodes(of: MemberAccessExprSyntax.self) {
       $0.node.declName.baseName.text == "now"
         && ["Date", "Foundation.Date"].contains($0.node.base?.trimmedDescription ?? "")
-        && SQLiteSyntax.isInsideCall($0.node, named: "createTemporaryTrigger")
+        && SQLiteSyntax.isInsideCall($0.node, named: name)
     }
     return (calls.map(\.erased) + members.map(\.erased)).sorted {
       ($0.file.relativePath, $0.node.position.utf8Offset) < ($1.file.relativePath, $1.node.position.utf8Offset)

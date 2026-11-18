@@ -202,6 +202,21 @@ Still local, and worth a look for the library:
 - A sort by location for merged findings. Combining findings of different node types is `Match.erased` now (from
   swift-jsonpath's adoption); the merged array is still in the order the queries ran.
 
+## SQLiteData checks from Tegola and Telaio
+
+Tegola distilled 22 Point-Free episodes into four constraint guides and architecture tests, following
+TelaioArchitecture's rule catalog. Nine syntax detectors moved upstream: temporary trigger/view calls in migrations,
+Swift clock/UUID values frozen into typed triggers/views, Observable-class wrapper tracking, FTS snippet bounds,
+JSON representations on explicit FTS5 tables, synchronous database access and immediate observation scheduling.
+The last two originated in Telaio's database rules; import gating now reads syntax and scheduling checks exact
+member expressions rather than substrings. Each detector returns findings for the adopter's own Rule.
+
+The source review also prevented two misleading rules: current TCA automatically ignores its supported Fetch
+wrappers, and empty column MATCH differs from an empty table MATCH. Migration-only temporary views, deliberate JSON
+indexing and synchronous setup remain valid choices. [The detector contracts](sqlitedata-constraints.md) document
+these distinctions. Schema compatibility, trigger completeness and CloudKit membership remain database tests and
+project-specific decisions.
+
 ## For the future guide
 
 - Start from the recipe above; it is what three independent adoptions converged on.
