@@ -218,12 +218,28 @@ scope.forcedTries                    // `try!`
 scope.optionalTries                  // `try?`; `optionalTries + forcedTries` for "errors are never swallowed"
 scope.forcedCasts                    // `as!`, folded or not
 scope.forceUnwraps                   // `value!`
+scope.temporaryTriggersInMigrations  // typed temporary triggers inside `registerMigration`
+scope.swiftValuesInSQLTriggers       // `Date()`, `Date.now`, `UUID()` frozen when a typed trigger is built
+scope.unignoredObservablePropertyWrappers // fetch/dependency wrappers in `@Observable` without `@ObservationIgnored`
+scope.invalidFTS5SnippetTokenCounts   // literal fourth `.snippet` argument outside `1...64`
+scope.temporaryViewsInMigrations     // typed temporary view calls inside `registerMigration`
+scope.swiftValuesInSQLViews          // direct Date/UUID expressions frozen into typed view definitions
+scope.jsonEncodedFTS5Columns         // JSON/JSONB column representations on explicit FTS5 table structs
+scope.synchronousDatabaseAccess      // unawaited inline read/write closures in GRDB/SQLiteData-importing files
+scope.immediateDatabaseObservations  // `.start`/`.publisher` with `in:` and exactly `scheduling: .immediate`
 
 expectNone(try Codebase().testCode.unexplainedKnownIssues, rule: .knownIssuesExplainThemselves)
 ```
 
 A comment justifies `@unchecked Sendable` when it is a `//` or `/* */` comment just above the declaration (no blank
 line between), at the end of the line that opens its body, or before the body's first member.
+
+The SQLiteData detectors need no database dependency. They inspect syntax, so scope them to your database code.
+They do not resolve receiver types, follow helper functions or validate SQL strings. The observable-wrapper detector
+checks `@Observable` classes only; current TCA automatically handles its supported fetch wrappers. Synchronous
+database access, immediate observation delivery, migration-local temporary views and JSON documents can be valid
+choices. Their detectors describe the syntax; the adopting repository chooses its scope and policy.
+[SQLiteData constraints](docs/sqlitedata-constraints.md) gives sources, examples and the limits of each detector.
 
 **SwiftSyntax is not re-exported.** `import LLMCheck` is enough for scopes, declarations, `calls(named:)`,
 `references(to:)`, `calledName`, `receiver` and the members of the nodes they return (`call.node.arguments`). A file
