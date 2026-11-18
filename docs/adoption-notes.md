@@ -204,11 +204,11 @@ Still local, and worth a look for the library:
 
 ## SQLiteData checks from Tegola and Telaio
 
-Tegola distilled 22 Point-Free episodes into four constraint guides and architecture tests, following
-TelaioArchitecture's rule catalog. Nine syntax detectors moved upstream: temporary trigger/view calls in migrations,
-Swift clock/UUID values frozen into typed triggers/views, Observable-class wrapper tracking, FTS snippet bounds,
-JSON representations on explicit FTS5 tables, synchronous database access and immediate observation scheduling.
-The last two originated in Telaio's database rules; import gating now reads syntax and scheduling checks exact
+Tegola have four constraint guides and architecture tests, following TelaioArchitecture's rule catalog. 
+Nine syntax detectors moved upstream: temporary trigger/view calls in migrations, Swift clock/UUID values frozen 
+into typed triggers/views, Observable-class wrapper tracking, FTS snippet bounds, JSON representations on 
+explicit FTS5 tables, synchronous database access and immediate observation scheduling. The last two 
+originated in Telaio's database rules; import gating now reads syntax and scheduling checks exact
 member expressions rather than substrings. Each detector returns findings for the adopter's own Rule.
 
 The source review also prevented two misleading rules: current TCA automatically ignores its supported Fetch
